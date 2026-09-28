@@ -2184,12 +2184,16 @@ async def runpod_test():
             pod = await runpod_cloud.pod()
         except Exception as exc:
             pod_error = str(exc)
+    diagnostic = runpod_cloud.readiness_diagnostic(
+        pod, online=online, pod_error=pod_error
+    )
     return {
         "ok": online,
         "online": online,
         **runpod_cloud.public(),
-        "pod": pod,
+        "pod": runpod_cloud.public_pod(pod),
         "pod_error": pod_error,
+        "diagnostic": diagnostic,
     }
 
 
@@ -2382,7 +2386,18 @@ async def generate(body: GenerateBody):
     if str(body.quality) not in QUALITY_SHORT_EDGE:
         raise HTTPException(400, "quality must be 352, 480, 608, 736, 768, or 1088 (aliases: 720, 1080)")
     if not await comfy.healthy():
-        raise HTTPException(503, "ComfyUI kapalı — Pinokio'dan Start ile Comfy'yi aç")
+        if runpod_cloud.provider == "runpod":
+            raise HTTPException(
+                503,
+                {
+                    "code": "compute_backend_offline",
+                    "message": (
+                        "Runpod ComfyUI is not connected. Open Settings → Compute backend, "
+                        "start or create a Cloud Edition managed Pod, then press Test until it says connected."
+                    ),
+                },
+            )
+        raise HTTPException(503, "ComfyUI is offline — start the local CUDA backend first")
 
     lora_bits = _lora_fields(body)
 

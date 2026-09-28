@@ -67,6 +67,48 @@ class RunpodCloudTests(unittest.TestCase):
         self.assertIn("H3_CLOUD_TOKEN", body["env"])
         self.assertIn("runpod/bootstrap.sh", body["args"])
 
+    def test_running_stock_pod_reports_missing_comfy_port(self):
+        cloud = RunpodCloud(self.path)
+        cloud.save(
+            {
+                "provider": "runpod",
+                "pod_id": "stock-pod",
+                "endpoint_url": "https://stock-pod-8188.proxy.runpod.net",
+            }
+        )
+        pod = {
+            "id": "stock-pod",
+            "status": "RUNNING",
+            "ports": ["8888/http", "22/tcp"],
+            "runtime": {"ports": [{"private": 8888, "type": "http"}]},
+        }
+        diagnostic = cloud.readiness_diagnostic(pod, online=False)
+        self.assertEqual(diagnostic["code"], "comfy_port_missing")
+        self.assertIn("stock PyTorch/Jupyter Pod is not enough", diagnostic["message"])
+        self.assertFalse(diagnostic["comfy_port_exposed"])
+
+    def test_managed_pod_can_report_setup_still_running(self):
+        cloud = RunpodCloud(self.path)
+        cloud.save({"provider": "runpod", "pod_id": "managed-pod"})
+        pod = {"id": "managed-pod", "status": "RUNNING", "ports": ["8188/http"]}
+        diagnostic = cloud.readiness_diagnostic(pod, online=False)
+        self.assertEqual(diagnostic["code"], "comfy_not_ready")
+        self.assertTrue(diagnostic["comfy_port_exposed"])
+
+    def test_public_pod_does_not_expose_environment_or_ssh(self):
+        pod = {
+            "id": "pod-1",
+            "status": "RUNNING",
+            "ports": ["8188/http"],
+            "env": {"JUPYTER_PASSWORD": "secret"},
+            "ssh": {"proxy": {"command": "secret-command"}},
+        }
+        public = RunpodCloud.public_pod(pod)
+        self.assertEqual(public["id"], "pod-1")
+        self.assertNotIn("env", public)
+        self.assertNotIn("ssh", public)
+        self.assertNotIn("secret", json.dumps(public))
+
 
 if __name__ == "__main__":
     unittest.main()

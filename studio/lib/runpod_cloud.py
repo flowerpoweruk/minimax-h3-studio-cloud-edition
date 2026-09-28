@@ -146,6 +146,101 @@ class RunpodCloud:
             "comfy_url": self.comfy_url,
         }
 
+    @staticmethod
+    def public_pod(pod: dict[str, Any]) -> dict[str, Any]:
+        """Return lifecycle details without forwarding Pod secrets to the browser."""
+        if not isinstance(pod, dict):
+            return {}
+        return {
+            key: pod.get(key)
+            for key in (
+                "id",
+                "name",
+                "status",
+                "desiredStatus",
+                "image",
+                "cloud",
+                "ports",
+                "gpu",
+                "createdAt",
+                "startedAt",
+            )
+            if pod.get(key) is not None
+        }
+
+    @staticmethod
+    def _pod_exposes_port(pod: dict[str, Any], port: int) -> bool:
+        expected = str(port)
+        for item in pod.get("ports") or []:
+            if isinstance(item, str) and item.split("/", 1)[0] == expected:
+                return True
+            if isinstance(item, dict) and str(item.get("private") or "") == expected:
+                return True
+        runtime = pod.get("runtime") or {}
+        for item in runtime.get("ports") or []:
+            if isinstance(item, dict) and str(item.get("private") or "") == expected:
+                return True
+        return False
+
+    def readiness_diagnostic(
+        self,
+        pod: Optional[dict[str, Any]] = None,
+        *,
+        online: bool = False,
+        pod_error: str = "",
+    ) -> dict[str, Any]:
+        """Explain the difference between a reachable Pod and ready ComfyUI."""
+        pod = pod if isinstance(pod, dict) else {}
+        status = str(pod.get("status") or pod.get("desiredStatus") or "").upper()
+        saved_endpoint = _http_url(str(self._settings.get("endpoint_url") or ""))
+        derived_endpoint = (
+            f"https://{self.pod_id}-8188.proxy.runpod.net" if self.pod_id else ""
+        )
+        custom_endpoint = bool(saved_endpoint and saved_endpoint != derived_endpoint)
+        port_exposed = self._pod_exposes_port(pod, 8188)
+        if online:
+            return {
+                "code": "ready",
+                "message": f"Runpod ComfyUI connected at {self.comfy_url}.",
+                "pod_status": status,
+                "comfy_port_exposed": port_exposed,
+            }
+        if pod_error:
+            return {
+                "code": "pod_api_error",
+                "message": f"Runpod API error: {pod_error}",
+                "pod_status": status,
+                "comfy_port_exposed": port_exposed,
+            }
+        if not self.pod_id:
+            message = "No Runpod Pod is attached. Create a managed Pod or enter an existing Pod ID."
+            code = "pod_missing"
+        elif not pod:
+            message = "The Runpod API key or Pod ID could not be verified. Check them, save, and test again."
+            code = "pod_unverified"
+        elif status and status != "RUNNING":
+            message = f"Pod {self.pod_id} is {status}. Start it, wait for setup, then press Test again."
+            code = "pod_not_running"
+        elif not custom_endpoint and not port_exposed:
+            message = (
+                f"Pod {self.pod_id} is running, but it does not expose ComfyUI on port 8188. "
+                "A stock PyTorch/Jupyter Pod is not enough. Use Create managed Pod, or install "
+                "Cloud Edition on this Pod and expose 8188/http."
+            )
+            code = "comfy_port_missing"
+        else:
+            message = (
+                f"Pod {self.pod_id} is running, but ComfyUI has not responded at {self.comfy_url}. "
+                "If this is a managed Pod, its first setup may still be downloading the H3 models."
+            )
+            code = "comfy_not_ready"
+        return {
+            "code": code,
+            "message": message,
+            "pod_status": status,
+            "comfy_port_exposed": port_exposed,
+        }
+
     def _headers(self) -> dict[str, str]:
         if not self.api_key:
             raise ValueError("Runpod API key is not configured")

@@ -735,6 +735,15 @@
     $("prod-text").textContent = msg;
   }
 
+  function setGenerateStatus(message, kind) {
+    const el = $("gen-status");
+    if (!el) return;
+    el.textContent = message || "";
+    el.classList.toggle("hidden", !message);
+    el.classList.toggle("error", kind === "error");
+    el.classList.toggle("success", kind === "success");
+  }
+
   /** Feedback visible in director dock (prod bar is often off-screen when modal is open). */
   function directorLlmFeedback(msg, kind) {
     const hint = $("llm-prod-hint");
@@ -8592,6 +8601,7 @@ async function pullCinemaLibraryAsset(kind, libraryId) {
 
     const btn = $("btn-generate");
     if (btn) btn.disabled = true;
+    setGenerateStatus("Checking the compute backend…", "");
     try {
       const faceLockOn = !!$("face-lock-chain")?.checked && state.faceImages.length > 0;
       const body = {
@@ -8671,11 +8681,14 @@ async function pullCinemaLibraryAsset(kind, libraryId) {
               ? tt("toast.newVideoQueuedRewrite")
               : tt("toast.newVideoQueued");
       toast(queuedLabel);
+      setGenerateStatus(queuedLabel, "success");
       setDirectorOpen(false);
       await refreshJobs();
       return true;
     } catch (e) {
-      toast(String(e.message || e));
+      const message = String(e.message || e);
+      toast(message);
+      setGenerateStatus(message, "error");
       return false;
     } finally {
       if (btn) btn.disabled = false;
@@ -10717,8 +10730,11 @@ async function pullCinemaLibraryAsset(kind, libraryId) {
     if (!saved) return;
     const data = await runpodRequest("/api/runpod/test", "Testing Runpod ComfyUI…");
     if (data) {
+      const diagnostic = data.diagnostic || {};
       setRunpodStatus(
-        data.online ? `Runpod connected · ${data.comfy_url}` : `Pod reachable status: ${data.pod?.desiredStatus || data.pod?.status || "not ready"}`,
+        data.online
+          ? `Runpod connected · ${data.comfy_url}`
+          : diagnostic.message || `Not connected · Pod ${data.pod?.status || data.pod?.desiredStatus || "not ready"}`,
         data.online ? "online" : "error"
       );
     }
