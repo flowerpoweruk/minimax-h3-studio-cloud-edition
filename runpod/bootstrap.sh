@@ -24,8 +24,10 @@ else
 fi
 
 uv venv "$ENV_DIR" --python "$(command -v python)" --system-site-packages
-uv pip install --python "$ENV_DIR/bin/python" -r "$COMFY/requirements.txt"
-uv pip install --python "$ENV_DIR/bin/python" -r "$ROOT/studio/requirements.txt"
+# Install into the official image's existing Python environment so uv treats its
+# CUDA-enabled torch as satisfied. The venv above inherits these system packages.
+uv pip install --system --break-system-packages -r "$COMFY/requirements.txt"
+uv pip install --system --break-system-packages -r "$ROOT/studio/requirements.txt"
 
 for spec in \
   "https://github.com/ltdrdata/ComfyUI-Manager|ComfyUI-Manager" \
@@ -40,7 +42,7 @@ for spec in \
     git -C "$dest" pull --ff-only
   fi
 done
-uv pip install --python "$ENV_DIR/bin/python" -r "$COMFY/custom_nodes/ComfyUI-KJNodes/requirements.txt"
+uv pip install --system --break-system-packages -r "$COMFY/custom_nodes/ComfyUI-KJNodes/requirements.txt"
 
 # Official Runpod PyTorch images already include a CUDA build tuned for their
 # driver/GPU. Reusing it avoids a multi-gigabyte reinstall on every Pod. Fall
