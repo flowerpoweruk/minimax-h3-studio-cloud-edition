@@ -1,14 +1,37 @@
-# MiniMax H3 Studio
+# Minimax H3 Studio - Cloud Edition
 
 <p align="center">
-  <img src="github-preview.png" alt="MiniMax H3 Studio" width="640" />
+  <img src="github-preview.png" alt="Minimax H3 Studio - Cloud Edition" width="640" />
 </p>
 
-Pinokio 1-click launcher: [MiniMax H3](https://huggingface.co/MiniMaxAI/MiniMax-H3) in ComfyUI, plus **H3 Studio** (Director, Plan, cinema studio, TR/EN). NVIDIA GPU.
+A fork of [erdinoral/minimax-h3-studio](https://github.com/erdinoral/minimax-h3-studio) that adds a selectable **Runpod cloud GPU backend**, while preserving local NVIDIA/CUDA and the original Pinokio launcher. It runs [MiniMax H3](https://huggingface.co/MiniMaxAI/MiniMax-H3) in ComfyUI with **H3 Studio** (Director, Plan, cinema studio, TR/EN).
 
 H3 is an omni-modal generative system: it takes text, images, video and audio as context and generates **video with native stereo audio** — 4–15 seconds, 24 FPS, 32 kHz stereo, in a wide range of aspect ratios (21:9 through 9:16). It handles 11 languages of spoken dialogue.
 
 Default output is a 768-pixel short edge, but that is a default, not a limit — see [Resolution](#resolution--you-are-not-capped-at-768p) below for running at 1080p and up.
+
+## Cloud Edition quick start
+
+### Windows + CUDA (standalone, double-click)
+
+1. Double-click **`install-windows-cuda.bat`**. It installs Git/uv/Python 3.10 when needed, creates an isolated environment, installs the CUDA 13 stack, ComfyUI and required nodes, then downloads the H3 weights. Downloads are resumable.
+2. Double-click **`run-cloud-edition.bat`** whenever you want to start the application. The browser opens automatically; closing the launcher stops the local processes.
+
+The full local installation needs roughly 75 GB free. The installer validates that an NVIDIA driver is present before downloading the models.
+
+### Pinokio (one click)
+
+Install and start the repository as a normal Pinokio app. The existing **Install / Start / Update / Reset** flows remain available. When Runpod is selected in Studio Settings, the launcher starts Studio without occupying the local GPU.
+
+### Runpod cloud GPU
+
+1. Start Cloud Edition and open **Settings → Compute backend**.
+2. Select **Runpod cloud GPU** and paste a Runpod API key.
+3. Either enter an existing Pod ID + ComfyUI endpoint/token, or click **Create managed Pod**. The managed option provisions a CUDA 13 Pod, creates an authenticated ComfyUI proxy, and downloads both H3 variants to persistent storage.
+4. Wait for the first setup to finish (about 64 GB of weights), then click **Test**. A green connection status means all Studio generation features now use the Runpod GPU.
+5. Click **Stop Pod** when idle to stop GPU billing. A network volume ID is recommended when you want the model cache to survive moving between machines; otherwise the managed Pod uses a persistent Pod volume.
+
+Secrets are saved only in `studio/data/runpod_settings.json`, which is ignored by Git. The managed Pod's public Runpod proxy rejects requests that do not carry the generated bearer token.
 
 ---
 
@@ -77,7 +100,7 @@ Studio never replaces Comfy. If Studio fails, use **Open ComfyUI** as before.
 
 ### Support
 
-Bugs and ideas: Studio top bar **Destek / Support**, or [GitHub Issues](https://github.com/erdinoral/minimax-h3-studio/issues). Use **Bug** for breakage and **Idea** for improvements.
+Bugs and ideas: Studio top bar **Destek / Support**, or [Cloud Edition GitHub Issues](https://github.com/flowerpoweruk/minimax-h3-studio-cloud-edition/issues). Use **Bug** for breakage and **Idea** for improvements.
 
 ### H3 Yönetmen (Director persona)
 
@@ -467,6 +490,35 @@ Verify after restarting: `pterm which caddy` resolves, `http://localhost:2019/co
 `http://127.0.0.1:8188` returning HTTP 200 means ComfyUI is healthy regardless of what the embedded view shows. If the sidebar shows **Open Web UI**, `start.js` captured the URL correctly and the launcher is working.
 
 ## API
+
+Cloud Edition exposes compute management through the local Studio API (normally `http://127.0.0.1:8787`):
+
+```bash
+# Read the active backend (secrets are always masked)
+curl http://127.0.0.1:8787/api/runpod/settings
+
+# Select Runpod and attach an existing Pod
+curl -X POST http://127.0.0.1:8787/api/runpod/settings \
+  -H "Content-Type: application/json" \
+  -d '{"provider":"runpod","api_key":"rpa_...","pod_id":"POD_ID","access_token":"TOKEN"}'
+
+# Test, start, or stop it
+curl -X POST http://127.0.0.1:8787/api/runpod/test
+curl -X POST http://127.0.0.1:8787/api/runpod/pod/start
+curl -X POST http://127.0.0.1:8787/api/runpod/pod/stop
+```
+
+Python and JavaScript use the same JSON endpoints:
+
+```python
+import requests
+requests.post("http://127.0.0.1:8787/api/runpod/test").raise_for_status()
+```
+
+```javascript
+const status = await fetch("http://127.0.0.1:8787/api/runpod/test", { method: "POST" });
+console.log(await status.json());
+```
 
 ComfyUI exposes an HTTP API on the same port as the web UI. The reliable way to build a request body:
 

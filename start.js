@@ -1,3 +1,18 @@
+const fs = require("fs")
+const path = require("path")
+
+function localComputeEnabled() {
+  try {
+    const file = path.join(__dirname, "studio", "data", "runpod_settings.json")
+    const settings = JSON.parse(fs.readFileSync(file, "utf8"))
+    return settings.provider !== "runpod"
+  } catch (_) {
+    return true
+  }
+}
+
+const useLocalCompute = localComputeEnabled()
+
 module.exports = {
   requires: {
     bundle: "ai"
@@ -21,6 +36,7 @@ module.exports = {
     // 1) ComfyUI backend only — no browser auto-launch. Lives only while start.js runs;
     //    Stop in Pinokio kills Comfy + Studio together (not a separate always-on app).
     {
+      when: useLocalCompute,
       method: "shell.run",
       params: {
         venv: "env",

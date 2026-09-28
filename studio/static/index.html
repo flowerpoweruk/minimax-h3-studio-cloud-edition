@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>H3 Studio</title>
+  <title>Minimax H3 Studio - Cloud Edition</title>
   <script>
     (function () {
       try {
@@ -1070,7 +1070,59 @@
         <button type="button" class="menu-btn" id="btn-settings-close">← Studio</button>
       </header>
       <div class="llm-settings" id="llm-settings">
-        <h3 class="llm-settings-title">Yönetmen LLM / API anahtarları</h3>
+        <h3 class="llm-settings-title" id="compute-settings-title">Compute backend</h3>
+        <p class="muted mode-hint" id="compute-settings-hint">Use the local NVIDIA GPU or an authenticated ComfyUI backend on a Runpod Pod.</p>
+        <label><span id="compute-provider-label">Video GPU</span>
+          <select id="compute-provider">
+            <option value="local">Local NVIDIA GPU</option>
+            <option value="runpod">Runpod cloud GPU</option>
+          </select>
+        </label>
+        <div id="runpod-settings" class="hidden">
+          <label><span id="runpod-api-key-label">Runpod API key</span>
+            <input type="password" id="runpod-api-key" placeholder="rpa_…" autocomplete="off" />
+            <small class="muted" id="runpod-api-key-hint">Stored only on this machine. Required to create, start, and stop Pods.</small>
+          </label>
+          <label><span id="runpod-pod-id-label">Pod ID</span>
+            <input type="text" id="runpod-pod-id" placeholder="Leave blank to create a managed H3 Pod" autocomplete="off" />
+          </label>
+          <label><span id="runpod-endpoint-label">ComfyUI endpoint (optional)</span>
+            <input type="url" id="runpod-endpoint" placeholder="https://POD_ID-8188.proxy.runpod.net" autocomplete="off" />
+            <small class="muted" id="runpod-endpoint-hint">Blank derives the standard Runpod proxy URL from the Pod ID.</small>
+          </label>
+          <label><span id="runpod-token-label">Backend access token</span>
+            <input type="password" id="runpod-token" placeholder="Auto-generated for managed Pods" autocomplete="off" />
+            <small class="muted" id="runpod-token-hint">Required by Cloud Edition's authenticated proxy. For an existing unsecured ComfyUI endpoint, leave blank.</small>
+          </label>
+          <details class="h3-models-advanced" id="runpod-advanced">
+            <summary id="runpod-advanced-summary">Managed Pod options</summary>
+            <label><span id="runpod-gpu-label">Runpod GPU type ID</span>
+              <input type="text" id="runpod-gpu" value="NVIDIA RTX A6000" autocomplete="off" />
+            </label>
+            <label><span id="runpod-cloud-label">Cloud tier</span>
+              <select id="runpod-cloud"><option value="SECURE">Secure Cloud</option><option value="COMMUNITY">Community Cloud</option></select>
+            </label>
+            <label><span id="runpod-volume-label">Persistent volume (GB)</span>
+              <input type="number" id="runpod-volume" min="80" max="1000" value="150" />
+            </label>
+            <label><span id="runpod-network-volume-label">Network volume ID (optional)</span>
+              <input type="text" id="runpod-network-volume" placeholder="Recommended for portable model storage" autocomplete="off" />
+            </label>
+            <label><span id="runpod-image-label">Container image</span>
+              <input type="text" id="runpod-image" value="runpod/pytorch:1.0.3-cu1300-torch291-ubuntu2404" autocomplete="off" />
+            </label>
+          </details>
+          <div class="batch-add-row runpod-actions">
+            <button type="button" class="btn-secondary" id="btn-runpod-save">Save &amp; connect</button>
+            <button type="button" class="btn-ghost" id="btn-runpod-test">Test</button>
+            <button type="button" class="btn-ghost" id="btn-runpod-create">Create managed Pod</button>
+            <button type="button" class="btn-ghost" id="btn-runpod-start">Start Pod</button>
+            <button type="button" class="btn-ghost" id="btn-runpod-stop">Stop Pod</button>
+          </div>
+        </div>
+        <p class="muted mode-hint compute-status" id="runpod-status">Local GPU selected.</p>
+
+        <h3 class="llm-settings-title" id="llm-settings-title">Yönetmen LLM / API anahtarları</h3>
         <p class="muted mode-hint" id="llm-settings-intro">1) Aktif sağlayıcıyı seç (Gemini) · 2) Key yapıştır · 3) <strong>API ayarlarını kaydet</strong>. Sadece key kaydetmek yetmez — sağlayıcı da Gemini olmalı. Video üretimi (Comfy/H3) değişmez.</p>
         <label><span id="llm-active-label">Aktif sağlayıcı</span>
           <select id="llm-provider-settings">

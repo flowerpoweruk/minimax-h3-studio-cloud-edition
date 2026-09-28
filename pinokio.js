@@ -1,7 +1,7 @@
 module.exports = {
   version: "8.1",
-  title: "MiniMax H3 Studio",
-  description: "1-click MiniMax H3 video in ComfyUI plus H3 Studio: local T2V/I2V, references, continuation, Gallery, Director/Cinema and TR/EN. NVIDIA GPU.",
+  title: "Minimax H3 Studio - Cloud Edition",
+  description: "MiniMax H3 video studio with a local NVIDIA CUDA backend or a managed Runpod cloud GPU.",
   icon: "icon.png",
   menu: async (kernel, info) => {
     let installed = info.exists("app/env")
@@ -75,7 +75,7 @@ module.exports = {
           return [{
             default: true,
             icon: "fa-solid fa-clapperboard",
-            text: "Open H3 Studio",
+            text: "Open Cloud Edition",
             href: local.url,
           }, {
             icon: "fa-solid fa-terminal",

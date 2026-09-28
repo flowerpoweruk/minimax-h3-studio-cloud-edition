@@ -877,6 +877,7 @@ body.director-modal-open .director-llm-tab {
 }
 .settings-panel input[type="password"],
 .settings-panel input[type="text"],
+.settings-panel input[type="number"],
 .settings-panel input[type="url"],
 .settings-panel select {
   width: 100%;
@@ -943,6 +944,28 @@ body.director-modal-open .director-llm-tab {
   display: block;
   margin-top: 4px;
   font-size: 0.72rem;
+}
+
+.runpod-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.compute-status {
+  border-left: 3px solid var(--line, #3a4149);
+  padding-left: 10px;
+}
+
+.compute-status.online {
+  border-left-color: #39c584;
+  color: #8de6ba;
+}
+
+.compute-status.error {
+  border-left-color: #ef6b73;
+  color: #ff9da3;
 }
 .chip.on,
 .chip[aria-pressed="true"] {

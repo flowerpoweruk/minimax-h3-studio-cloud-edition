@@ -1,6 +1,6 @@
 {
-  "title": "MiniMax H3 Studio",
-  "description": "1-click MiniMax H3 video in ComfyUI plus H3 Studio: local T2V/I2V, references, continuation, Gallery, Director/Cinema and TR/EN. NVIDIA GPU.",
+  "title": "Minimax H3 Studio - Cloud Edition",
+  "description": "MiniMax H3 video studio with a local NVIDIA CUDA backend or a managed Runpod cloud GPU.",
   "icon": "icon.png",
   "gpu": "nvidia",
   "posts": [],
@@ -8,8 +8,9 @@
     {
       "title": "H3 Studio",
       "links": [
-        { "title": "GitHub", "value": "https://github.com/erdinoral/minimax-h3-studio" },
-        { "title": "Support / Issues", "value": "https://github.com/erdinoral/minimax-h3-studio/issues" },
+        { "title": "Cloud Edition GitHub", "value": "https://github.com/flowerpoweruk/minimax-h3-studio-cloud-edition" },
+        { "title": "Support / Issues", "value": "https://github.com/flowerpoweruk/minimax-h3-studio-cloud-edition/issues" },
+        { "title": "Original project", "value": "https://github.com/erdinoral/minimax-h3-studio" },
         { "title": "Open Collective", "value": "https://opencollective.com/minimax-h3-studio" },
         { "title": "GitHub Sponsors", "value": "https://github.com/sponsors/erdinoral" }
       ]

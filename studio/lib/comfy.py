@@ -23,6 +23,19 @@ REF2VA_MODELS = {
 }
 
 
+def detect_h3_tae(comfy_root: Optional[Path] = None) -> Optional[str]:
+    """Return an installed H3 temporal autoencoder preview model, if present."""
+    root = Path(comfy_root) if comfy_root else Path(__file__).resolve().parents[2] / "app"
+    folder = root / "models" / "vae_approx"
+    if not folder.is_dir():
+        return None
+    for path in sorted(folder.iterdir()):
+        name = path.name.lower()
+        if path.is_file() and "h3" in name and path.suffix.lower() in (".pt", ".pth", ".safetensors"):
+            return path.name
+    return None
+
+
 def enhance_ref_prompt(
     text: str,
     *,
@@ -99,23 +112,35 @@ def enhance_video_ref_prompt(text: str, *, n_videos: int) -> str:
 
 
 class ComfyClient:
-    def __init__(self, base_url: str = "http://127.0.0.1:8188"):
+    def __init__(
+        self,
+        base_url: str = "http://127.0.0.1:8188",
+        *,
+        headers: Optional[dict[str, str]] = None,
+    ):
+        self.configure(base_url, headers=headers)
+        self.client_id = str(uuid.uuid4())
+
+    def configure(
+        self, base_url: str, *, headers: Optional[dict[str, str]] = None
+    ) -> None:
+        """Switch between local and remote ComfyUI without restarting Studio."""
         u = (base_url or "").strip() or "http://127.0.0.1:8188"
         if not u.startswith(("http://", "https://")):
             u = "http://" + u.lstrip("/")
         self.base_url = u.rstrip("/")
-        self.client_id = str(uuid.uuid4())
+        self.headers = dict(headers or {})
 
     async def healthy(self) -> bool:
         try:
-            async with httpx.AsyncClient(timeout=3.0) as c:
+            async with httpx.AsyncClient(timeout=3.0, headers=self.headers) as c:
                 r = await c.get(f"{self.base_url}/system_stats")
                 return r.status_code == 200
         except Exception:
             return False
 
     async def system_stats(self) -> dict:
-        async with httpx.AsyncClient(timeout=5.0) as c:
+        async with httpx.AsyncClient(timeout=5.0, headers=self.headers) as c:
             r = await c.get(f"{self.base_url}/system_stats")
             r.raise_for_status()
             return r.json()
@@ -125,7 +150,7 @@ class ComfyClient:
         last_err: Exception | None = None
         for attempt in range(4):
             try:
-                async with httpx.AsyncClient(timeout=60.0) as c:
+                async with httpx.AsyncClient(timeout=60.0, headers=self.headers) as c:
                     r = await c.post(f"{self.base_url}/prompt", json=payload)
                     if r.status_code >= 400:
                         raise RuntimeError(r.text)
@@ -139,13 +164,13 @@ class ComfyClient:
         raise RuntimeError(f"Comfy queue başarısız: {last_err}")
 
     async def history(self, prompt_id: str) -> dict:
-        async with httpx.AsyncClient(timeout=30.0) as c:
+        async with httpx.AsyncClient(timeout=30.0, headers=self.headers) as c:
             r = await c.get(f"{self.base_url}/history/{prompt_id}")
             r.raise_for_status()
             return r.json()
 
     async def queue_status(self) -> dict:
-        async with httpx.AsyncClient(timeout=10.0) as c:
+        async with httpx.AsyncClient(timeout=10.0, headers=self.headers) as c:
             r = await c.get(f"{self.base_url}/queue")
             r.raise_for_status()
             return r.json()
@@ -180,7 +205,11 @@ class ComfyClient:
                 await res
 
         try:
-            async with websockets.connect(self.ws_url(), max_size=8 * 1024 * 1024) as ws:
+            async with websockets.connect(
+                self.ws_url(),
+                max_size=8 * 1024 * 1024,
+                additional_headers=self.headers or None,
+            ) as ws:
                 while not stop_event.is_set():
                     try:
                         raw = await asyncio.wait_for(ws.recv(), timeout=1.0)
@@ -288,14 +317,14 @@ class ComfyClient:
         return (compact[-400:] if len(compact) > 400 else compact) or "Comfy execution error"
 
     async def interrupt(self) -> None:
-        async with httpx.AsyncClient(timeout=10.0) as c:
+        async with httpx.AsyncClient(timeout=10.0, headers=self.headers) as c:
             await c.post(f"{self.base_url}/interrupt")
 
     async def free_memory(self, *, unload_models: bool = True) -> bool:
         """Unload H3 weights and empty CUDA cache (ComfyUI POST /free)."""
         payload = {"unload_models": unload_models, "free_memory": True}
         try:
-            async with httpx.AsyncClient(timeout=60.0) as c:
+            async with httpx.AsyncClient(timeout=60.0, headers=self.headers) as c:
                 r = await c.post(f"{self.base_url}/free", json=payload)
                 return r.status_code < 400
         except Exception:
@@ -306,7 +335,7 @@ class ComfyClient:
         last_err: Exception | None = None
         for attempt in range(4):
             try:
-                async with httpx.AsyncClient(timeout=120.0) as c:
+                async with httpx.AsyncClient(timeout=120.0, headers=self.headers) as c:
                     with path.open("rb") as f:
                         r = await c.post(
                             f"{self.base_url}/upload/image",
@@ -333,7 +362,7 @@ class ComfyClient:
         last_err: Exception | None = None
         for attempt in range(4):
             try:
-                async with httpx.AsyncClient(timeout=300.0) as c:
+                async with httpx.AsyncClient(timeout=300.0, headers=self.headers) as c:
                     with path.open("rb") as f:
                         r = await c.post(
                             f"{self.base_url}/upload/image",
@@ -366,7 +395,7 @@ class ComfyClient:
         last_err: Exception | None = None
         for attempt in range(4):
             try:
-                async with httpx.AsyncClient(timeout=180.0) as c:
+                async with httpx.AsyncClient(timeout=180.0, headers=self.headers) as c:
                     with path.open("rb") as f:
                         r = await c.post(
                             f"{self.base_url}/upload/image",
@@ -385,7 +414,7 @@ class ComfyClient:
         self, filename: str, subfolder: str = "", type_: str = "output", dest: Path = None
     ) -> Path:
         params = {"filename": filename, "subfolder": subfolder, "type": type_}
-        async with httpx.AsyncClient(timeout=300.0) as c:
+        async with httpx.AsyncClient(timeout=300.0, headers=self.headers) as c:
             r = await c.get(f"{self.base_url}/view", params=params)
             r.raise_for_status()
             dest = dest or Path(filename)
@@ -413,6 +442,7 @@ def build_t2v_prompt(
     lora_strength: float = 0.75,
     sage_attention: Optional[str] = "auto",
     post_pass: str = "",
+    fast_preview_tae: Optional[str] = None,
 ) -> dict[str, Any]:
     """Build FL2VA graph. silent_audio skips AudioVAE load + VAEDecodeAudio (faster end)."""
     m = {**DEFAULT_MODELS, **(models or {})}
@@ -566,6 +596,7 @@ def build_multishot_prompt(
     post_pass: str = "",
     chain_normalize: bool = True,
     voice_names: Optional[list[str]] = None,
+    preview_first_shot: bool = False,
 ) -> dict[str, Any]:
     """CORE Seamless Chain: H3MultishotSampler (last-frame weld, no Motion-Context).
 
@@ -684,6 +715,7 @@ def build_ref2va_prompt(
     lora_strength: float = 0.75,
     sage_attention: Optional[str] = "auto",
     post_pass: str = "",
+    fast_preview_tae: Optional[str] = None,
 ) -> dict[str, Any]:
     """Build Ref2VA graph (MiniMaxH3ReferenceToVideo + Ref2VA UNET).
 

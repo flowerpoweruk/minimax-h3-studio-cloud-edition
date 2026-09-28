@@ -1,5 +1,7 @@
 ENVIRONMENT
 node_modules
+__pycache__/
+*.py[cod]
 venv
 /app/
 /env/
@@ -22,3 +24,4 @@ venv
 /studio/logs/
 /studio/__pycache__/
 /studio/lib/__pycache__/
+/studio/tests/__pycache__/

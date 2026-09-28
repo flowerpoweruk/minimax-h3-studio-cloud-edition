@@ -10584,6 +10584,163 @@ async function pullCinemaLibraryAsset(kind, libraryId) {
     setDirectorModal(!$("director-dock")?.classList.contains("modal-open"));
   });
 
+  function setRunpodStatus(message, kind) {
+    const el = $("runpod-status");
+    if (!el) return;
+    el.textContent = message || "";
+    el.classList.toggle("online", kind === "online");
+    el.classList.toggle("error", kind === "error");
+  }
+
+  function setRunpodBusy(busy) {
+    document.querySelectorAll(".runpod-actions button").forEach((button) => {
+      button.disabled = !!busy;
+    });
+  }
+
+  function syncRunpodSettings(data) {
+    const d = data || {};
+    const provider = d.provider || "local";
+    if ($("compute-provider")) $("compute-provider").value = provider;
+    $("runpod-settings")?.classList.toggle("hidden", provider !== "runpod");
+    if ($("runpod-pod-id")) $("runpod-pod-id").value = d.pod_id || "";
+    if ($("runpod-endpoint")) $("runpod-endpoint").value = d.endpoint_url || "";
+    if ($("runpod-gpu")) $("runpod-gpu").value = d.gpu_type || "NVIDIA RTX A6000";
+    if ($("runpod-cloud")) $("runpod-cloud").value = d.cloud_type || "SECURE";
+    if ($("runpod-volume")) $("runpod-volume").value = d.volume_gb || 150;
+    if ($("runpod-network-volume")) $("runpod-network-volume").value = d.network_volume_id || "";
+    if ($("runpod-image")) $("runpod-image").value = d.image || "runpod/pytorch:1.0.3-cu1300-torch291-ubuntu2404";
+    if ($("runpod-api-key")) {
+      $("runpod-api-key").value = "";
+      $("runpod-api-key").placeholder = d.api_key_set
+        ? `✓ ${d.api_key_masked || "saved"}`
+        : "rpa_…";
+    }
+    if ($("runpod-token")) {
+      $("runpod-token").value = "";
+      $("runpod-token").placeholder = d.access_token_set
+        ? `✓ ${d.access_token_masked || "saved"}`
+        : "Auto-generated for managed Pods";
+    }
+    if (provider === "local") {
+      setRunpodStatus("Local NVIDIA GPU selected.", "online");
+    } else if (d.online) {
+      setRunpodStatus(`Runpod connected · ${d.comfy_url || d.pod_id || "ComfyUI"}`, "online");
+    } else {
+      setRunpodStatus(
+        d.pod_id
+          ? `Runpod configured · Pod ${d.pod_id}. Start it, then Test when setup is complete.`
+          : "Runpod selected. Attach a Pod or create a managed H3 Pod.",
+        ""
+      );
+    }
+  }
+
+  function collectRunpodSettings() {
+    return {
+      provider: $("compute-provider")?.value || "local",
+      api_key: ($("runpod-api-key")?.value || "").trim(),
+      pod_id: ($("runpod-pod-id")?.value || "").trim(),
+      endpoint_url: ($("runpod-endpoint")?.value || "").trim(),
+      access_token: ($("runpod-token")?.value || "").trim(),
+      gpu_type: ($("runpod-gpu")?.value || "").trim(),
+      cloud_type: $("runpod-cloud")?.value || "SECURE",
+      volume_gb: Number($("runpod-volume")?.value || 150),
+      network_volume_id: ($("runpod-network-volume")?.value || "").trim(),
+      image: ($("runpod-image")?.value || "").trim(),
+    };
+  }
+
+  async function loadRunpodSettings() {
+    try {
+      const response = await fetch("/api/runpod/settings");
+      const data = await response.json();
+      if (!response.ok) throw new Error(errDetail(data));
+      syncRunpodSettings(data);
+      return data;
+    } catch (error) {
+      setRunpodStatus(String(error.message || error), "error");
+      return null;
+    }
+  }
+
+  async function saveRunpodSettings(opts) {
+    setRunpodBusy(true);
+    setRunpodStatus("Saving compute settings…", "");
+    try {
+      const response = await fetch("/api/runpod/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(collectRunpodSettings()),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(errDetail(data));
+      syncRunpodSettings(data);
+      if (!(opts && opts.quiet)) toast(data.online || data.provider === "local" ? "Compute backend saved" : "Runpod saved; Pod is not ready yet");
+      return data;
+    } catch (error) {
+      setRunpodStatus(String(error.message || error), "error");
+      if (!(opts && opts.quiet)) toast(String(error.message || error));
+      return null;
+    } finally {
+      setRunpodBusy(false);
+    }
+  }
+
+  async function runpodRequest(path, statusText) {
+    setRunpodBusy(true);
+    setRunpodStatus(statusText, "");
+    try {
+      const response = await fetch(path, { method: "POST" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(errDetail(data));
+      syncRunpodSettings(data);
+      return data;
+    } catch (error) {
+      setRunpodStatus(String(error.message || error), "error");
+      toast(String(error.message || error));
+      return null;
+    } finally {
+      setRunpodBusy(false);
+    }
+  }
+
+  $("compute-provider")?.addEventListener("change", async () => {
+    const provider = $("compute-provider").value;
+    $("runpod-settings")?.classList.toggle("hidden", provider !== "runpod");
+    if (provider === "local") await saveRunpodSettings({ quiet: true });
+    else setRunpodStatus("Runpod selected. Save credentials or create a managed Pod.", "");
+  });
+  $("btn-runpod-save")?.addEventListener("click", () => void saveRunpodSettings());
+  $("btn-runpod-test")?.addEventListener("click", async () => {
+    const saved = await saveRunpodSettings({ quiet: true });
+    if (!saved) return;
+    const data = await runpodRequest("/api/runpod/test", "Testing Runpod ComfyUI…");
+    if (data) {
+      setRunpodStatus(
+        data.online ? `Runpod connected · ${data.comfy_url}` : `Pod reachable status: ${data.pod?.desiredStatus || data.pod?.status || "not ready"}`,
+        data.online ? "online" : "error"
+      );
+    }
+  });
+  $("btn-runpod-create")?.addEventListener("click", async () => {
+    const saved = await saveRunpodSettings({ quiet: true });
+    if (!saved) return;
+    const data = await runpodRequest("/api/runpod/pod/create", "Creating managed Runpod Pod…");
+    if (data) setRunpodStatus(`Pod ${data.pod_id || data.pod?.id || "created"} is installing H3. This first setup downloads about 64 GB.`, "");
+  });
+  $("btn-runpod-start")?.addEventListener("click", async () => {
+    const saved = await saveRunpodSettings({ quiet: true });
+    if (saved) await runpodRequest("/api/runpod/pod/start", "Starting Runpod Pod…");
+  });
+  $("btn-runpod-stop")?.addEventListener("click", async () => {
+    const saved = await saveRunpodSettings({ quiet: true });
+    if (saved) {
+      const data = await runpodRequest("/api/runpod/pod/stop", "Stopping Runpod Pod…");
+      if (data) setRunpodStatus("Runpod Pod stopped. GPU billing is stopped.", "");
+    }
+  });
+
   function syncNotifyProviderUi() {
     const prov = ($("notify-provider")?.value || "telegram").toLowerCase();
     $("notify-telegram-wrap")?.classList.toggle("hidden", prov !== "telegram");
@@ -10801,6 +10958,7 @@ async function pullCinemaLibraryAsset(kind, libraryId) {
     $("view-settings")?.classList.remove("hidden");
     syncChromeFitFromStorage();
     void refreshDirectorStatus();
+    void loadRunpodSettings();
     void refreshNotifySettings();
     void loadLoras();
     void loadH3Models();
@@ -10814,7 +10972,7 @@ async function pullCinemaLibraryAsset(kind, libraryId) {
     void saveNotifySettings({ quiet: true });
     $("view-settings")?.classList.add("hidden");
   });
-  const SUPPORT_REPO = "https://github.com/erdinoral/minimax-h3-studio";
+  const SUPPORT_REPO = "https://github.com/flowerpoweruk/minimax-h3-studio-cloud-edition";
   $("btn-support")?.addEventListener("click", () => {
     setDirectorLlmOpen(false);
     $("view-gallery")?.classList.add("hidden");

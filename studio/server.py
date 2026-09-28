@@ -108,6 +108,7 @@ from lib.music import (
 from lib.llm import LlmRouter
 from lib.notify import NotifyService
 from lib.ollama import OllamaClient
+from lib.runpod_cloud import RunpodCloud
 from lib import slog
 from lib import cinema
 from lib import donors as donor_roll
@@ -133,6 +134,7 @@ REFS_META_FILE = DATA / "refs_meta.json"
 SESSIONS_FILE = DATA / "director_sessions.json"
 LLM_SETTINGS_FILE = DATA / "llm_settings.json"
 NOTIFY_SETTINGS_FILE = DATA / "notify_settings.json"
+RUNPOD_SETTINGS_FILE = DATA / "runpod_settings.json"
 PRODUCTION_FILE = DATA / "production.json"
 CINEMA_FILE = DATA / "cinema.json"
 STATIC = ROOT / "static"
@@ -660,8 +662,9 @@ def _voice_refs_from_hits(hits: list[dict[str, Any]]) -> list[str]:
     return out
 
 
-app = FastAPI(title="H3 Studio")
-comfy = ComfyClient(COMFY_URL)
+app = FastAPI(title="Minimax H3 Studio - Cloud Edition")
+runpod_cloud = RunpodCloud(RUNPOD_SETTINGS_FILE, local_url=COMFY_URL)
+comfy = ComfyClient(runpod_cloud.comfy_url, headers=runpod_cloud.comfy_headers)
 ollama = OllamaClient(OLLAMA_URL)
 llm = LlmRouter(LLM_SETTINGS_FILE, ollama=ollama)
 notifier = NotifyService(NOTIFY_SETTINGS_FILE)
@@ -1856,7 +1859,8 @@ async def startup():
         "studio startup",
         host=HOST,
         port=PORT,
-        comfy=COMFY_URL.replace("https://", "").replace("http://", ""),
+        comfy=comfy.base_url.replace("https://", "").replace("http://", ""),
+        compute=runpod_cloud.provider,
         pid=os.getpid(),
     )
     _load_jobs()
@@ -1983,7 +1987,8 @@ async def health():
     return {
         "studio": True,
         "comfy": ok,
-        "comfy_url": COMFY_URL,
+        "comfy_url": comfy.base_url,
+        "compute_provider": runpod_cloud.provider,
         "queue_alive": q_alive,
         "queue_busy": _running,
         "logs_dir": str(LOGS),
@@ -2125,6 +2130,102 @@ async def system_stats():
     except Exception:
         pass
     return out
+
+
+class RunpodSettingsBody(BaseModel):
+    provider: Optional[str] = None
+    api_key: Optional[str] = None
+    pod_id: Optional[str] = None
+    endpoint_url: Optional[str] = None
+    access_token: Optional[str] = None
+    gpu_type: Optional[str] = None
+    cloud_type: Optional[str] = None
+    volume_gb: Optional[int] = None
+    network_volume_id: Optional[str] = None
+    image: Optional[str] = None
+
+
+def _apply_compute_backend() -> None:
+    comfy.configure(runpod_cloud.comfy_url, headers=runpod_cloud.comfy_headers)
+
+
+@app.get("/api/runpod/settings")
+async def runpod_settings_get():
+    return {"ok": True, **runpod_cloud.public()}
+
+
+@app.post("/api/runpod/settings")
+async def runpod_settings_set(body: RunpodSettingsBody):
+    patch = body.model_dump(exclude_none=True)
+    # Blank secret fields mean "keep the saved secret", matching the LLM settings UI.
+    for secret in ("api_key", "access_token"):
+        if secret in patch and not str(patch[secret] or "").strip():
+            patch.pop(secret)
+    public = runpod_cloud.save(patch)
+    _apply_compute_backend()
+    online = await comfy.healthy()
+    slog.info(
+        "compute settings saved",
+        provider=runpod_cloud.provider,
+        pod=runpod_cloud.pod_id[:12],
+        online=online,
+    )
+    return {"ok": True, **public, "online": online}
+
+
+@app.post("/api/runpod/test")
+async def runpod_test():
+    _apply_compute_backend()
+    online = await comfy.healthy()
+    pod: dict[str, Any] = {}
+    pod_error = ""
+    if runpod_cloud.api_key and runpod_cloud.pod_id:
+        try:
+            pod = await runpod_cloud.pod()
+        except Exception as exc:
+            pod_error = str(exc)
+    return {
+        "ok": online,
+        "online": online,
+        **runpod_cloud.public(),
+        "pod": pod,
+        "pod_error": pod_error,
+    }
+
+
+@app.get("/api/runpod/pods")
+async def runpod_pods():
+    try:
+        pods = await runpod_cloud.list_pods()
+    except Exception as exc:
+        raise HTTPException(502, str(exc)) from exc
+    return {"ok": True, "pods": pods}
+
+
+@app.post("/api/runpod/pod/create")
+async def runpod_pod_create():
+    if _running or any(j.get("status") in ("queued", "running") for j in _jobs):
+        raise HTTPException(409, "Stop the current production queue before changing GPU backends")
+    try:
+        pod = await runpod_cloud.create_pod()
+    except Exception as exc:
+        raise HTTPException(502, str(exc)) from exc
+    _apply_compute_backend()
+    slog.info("Runpod pod created", pod=runpod_cloud.pod_id[:12])
+    return {"ok": True, "pod": pod, **runpod_cloud.public()}
+
+
+@app.post("/api/runpod/pod/{action}")
+async def runpod_pod_action(action: str):
+    if action not in ("start", "stop"):
+        raise HTTPException(400, "action must be start or stop")
+    if _running and action == "stop":
+        raise HTTPException(409, "Stop the current production queue before stopping the Pod")
+    try:
+        pod = await runpod_cloud.pod_action(action)
+    except Exception as exc:
+        raise HTTPException(502, str(exc)) from exc
+    return {"ok": True, "action": action, "pod": pod, **runpod_cloud.public()}
 
 
 @app.get("/api/jobs")
@@ -6128,8 +6229,8 @@ async def prepare_last_frame_api(job_id: str):
 
 @app.get("/api/proxy/view")
 async def proxy_view(filename: str, subfolder: str = "", type: str = "output"):
-    url = f"{COMFY_URL}/view"
-    async with httpx.AsyncClient(timeout=120.0) as c:
+    url = f"{comfy.base_url}/view"
+    async with httpx.AsyncClient(timeout=120.0, headers=comfy.headers) as c:
         r = await c.get(url, params={"filename": filename, "subfolder": subfolder, "type": type})
         if r.status_code >= 400:
             raise HTTPException(r.status_code, r.text)
