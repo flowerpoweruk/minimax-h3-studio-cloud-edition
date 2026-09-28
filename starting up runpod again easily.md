@@ -1,14 +1,15 @@
 # Starting Up Runpod Again Easily
 
 This guide is for the Cloud Edition Pod that has already been configured. The
-ComfyUI installation, Python environment, custom nodes, and MiniMax H3 model
-files live in the Pod's 150 GB persistent `/workspace` storage.
+ComfyUI installation, Python environment, custom nodes, and all MiniMax H3
+model files live on the 150 GB Runpod Network Volume named
+**minimax-h3-cloud-models**, mounted at `/workspace`.
 
 ## Important: stop the Pod; do not delete it
 
-- **Stop Pod** keeps the configured Pod and its persistent `/workspace` files.
-- **Terminate**, **Delete**, or removing its storage can permanently remove the
-  downloaded models and force a full setup again.
+- **Stop Pod** ends GPU compute billing while keeping the configured Pod.
+- The Network Volume keeps `/workspace` independently of the Pod. Never delete
+  the Network Volume named **minimax-h3-cloud-models**.
 - Do not create a generic PyTorch/Jupyter Pod for Cloud Edition. It will not
   include the Cloud Edition startup command or ComfyUI service.
 
@@ -16,8 +17,8 @@ files live in the Pod's 150 GB persistent `/workspace` storage.
 
 1. Open the [Runpod Console](https://www.runpod.io/console/pods).
 2. Find the Pod named **minimax-h3-studio-cloud-edition**.
-   It should show **Secure Cloud** and an **NVIDIA A40 (48 GB)**. Do not start
-   any Pod whose name begins with `OLD-community`.
+   It should show **Secure Cloud**, a **48 GB RTX PRO 6000 MIG**, and the
+   network volume **minimax-h3-cloud-models**.
 3. Click **Start** for that same Pod.
 4. Wait for Runpod to show the Pod as **Running**.
 5. Allow roughly 2–5 minutes for Cloud Edition to check the cached files and
@@ -44,7 +45,7 @@ actually changed.
 1. Wait for any active generation to finish.
 2. Open the [Runpod Console](https://www.runpod.io/console/pods).
 3. Click **Stop** on **minimax-h3-studio-cloud-edition**.
-4. Do **not** click Terminate or Delete.
+4. Leave the Network Volume **minimax-h3-cloud-models** in place.
 
 Stopping the Pod ends GPU compute billing while retaining the Pod's persistent
 files. Runpod may still charge a much smaller storage fee while it is stopped.
@@ -64,15 +65,20 @@ files. Runpod may still charge a much smaller storage fee while it is stopped.
 5. Do not create a second GPU Pod just to fix a slow startup; that can bill for
    two GPUs simultaneously.
 
-## If the Pod was deleted
+## If Runpod says the GPU is unavailable, or the Pod was deleted
 
-The original Pod's ordinary persistent storage may no longer be recoverable.
-Use **Create managed Pod** inside Cloud Edition instead of creating a stock Pod
-in Runpod. A managed Pod configures the correct ports, access token, persistent
-workspace, repository, and automatic startup command.
+The models are safe on the Network Volume and do not need downloading again:
 
-For storage that must move between replacement Pods, create a Runpod Network
-Volume first, paste its ID into **Settings → Managed Pod options → Network
-volume ID**, and then use **Create managed Pod**. Models stored on that Network
-Volume can be attached to a replacement Pod without downloading them again.
+1. In H3 Studio open **Settings → Compute backend → Managed Pod options**.
+2. Confirm **Cloud tier** is **Secure Cloud**, **GPU type ID** is
+   `NVIDIA RTX PRO 6000 Blackwell Server Edition MIG 2g.48gb`, and **Network
+   volume ID** is already filled in.
+3. Terminate the unavailable old Pod in Runpod so only one Pod can use the
+   volume.
+4. Click **Create managed Pod** in H3 Studio.
+5. Wait for it to run, click **Test**, then generate normally.
+
+The replacement Pod attaches the same network volume, detects the complete
+models, and starts ComfyUI without downloading them again. Do not create a
+generic PyTorch/Jupyter Pod because it lacks the Cloud Edition startup command.
 

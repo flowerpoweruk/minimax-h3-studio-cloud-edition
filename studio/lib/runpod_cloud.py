@@ -304,7 +304,9 @@ class RunpodCloud:
             "disk": 80,
             "ports": ["8188/http", "22/tcp"],
             "startSsh": True,
-            "env": {"H3_CLOUD_TOKEN": token},
+            # Managed Pods install both T2V and reference-video weights once so
+            # every Studio mode works after a restart without another setup.
+            "env": {"H3_CLOUD_TOKEN": token, "H3_DOWNLOAD_REF2V": "1"},
             "gpu": {
                 "id": settings.get("gpu_type") or DEFAULT_GPU,
                 "count": 1,
