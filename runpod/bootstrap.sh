@@ -9,12 +9,13 @@ MODELS="$RUNTIME/models"
 
 export DEBIAN_FRONTEND=noninteractive
 export UV_HTTP_TIMEOUT=1200
-export HF_HUB_ENABLE_HF_TRANSFER=1
 
 mkdir -p "$RUNTIME" "$MODELS/diffusion_models" "$MODELS/text_encoders" "$MODELS/vae" "$MODELS/loras"
 apt-get update -qq
 apt-get install -y -qq git ffmpeg curl
-python -m pip install -q --upgrade uv huggingface_hub hf_transfer
+if ! command -v uv >/dev/null 2>&1; then
+  python -m pip install -q --upgrade uv
+fi
 
 if [[ ! -d "$COMFY/.git" ]]; then
   git clone --depth 1 https://github.com/comfyanonymous/ComfyUI "$COMFY"
@@ -41,10 +42,16 @@ for spec in \
 done
 uv pip install --python "$ENV_DIR/bin/python" -r "$COMFY/custom_nodes/ComfyUI-KJNodes/requirements.txt"
 
-# CUDA 13 / torch 2.10 is the accelerated path used by the local edition too.
-uv pip install --python "$ENV_DIR/bin/python" \
-  torch==2.10.0 torchvision==0.25.0 torchaudio==2.10.0 \
-  --index-url https://download.pytorch.org/whl/cu130 --force-reinstall
+# Official Runpod PyTorch images already include a CUDA build tuned for their
+# driver/GPU. Reusing it avoids a multi-gigabyte reinstall on every Pod. Fall
+# back to Cloud Edition's CUDA 13 build only for bare images without CUDA torch.
+if "$ENV_DIR/bin/python" -c 'import torch; assert torch.cuda.is_available()' >/dev/null 2>&1; then
+  "$ENV_DIR/bin/python" -c 'import torch; print(f"[H3 Cloud] reusing torch {torch.__version__} / CUDA {torch.version.cuda}")'
+else
+  uv pip install --python "$ENV_DIR/bin/python" \
+    torch==2.10.0 torchvision==0.25.0 torchaudio==2.10.0 \
+    --index-url https://download.pytorch.org/whl/cu130
+fi
 
 rm -rf "$COMFY/models/diffusion_models" "$COMFY/models/text_encoders" "$COMFY/models/vae" "$COMFY/models/loras"
 ln -s "$MODELS/diffusion_models" "$COMFY/models/diffusion_models"
@@ -63,9 +70,13 @@ download_model() {
     echo "[H3 Cloud] ready: $file"
     return
   fi
-  "$ENV_DIR/bin/python" -c \
-    'from huggingface_hub import hf_hub_download; import sys; hf_hub_download(sys.argv[1], sys.argv[2], local_dir=sys.argv[3])' \
-    "$repo" "$file" "$dest"
+  local target="$dest/$file" partial="$dest/$file.partial"
+  mkdir -p "$(dirname "$target")"
+  echo "[H3 Cloud] downloading: $file"
+  curl --fail --location --retry 8 --retry-all-errors \
+    --continue-at - --output "$partial" \
+    "https://huggingface.co/$repo/resolve/main/$file?download=true"
+  mv "$partial" "$target"
 }
 
 download_model Comfy-Org/MiniMax-H3 \
