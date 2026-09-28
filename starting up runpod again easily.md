@@ -16,6 +16,8 @@ files live in the Pod's 150 GB persistent `/workspace` storage.
 
 1. Open the [Runpod Console](https://www.runpod.io/console/pods).
 2. Find the Pod named **minimax-h3-studio-cloud-edition**.
+   It should show **Secure Cloud** and an **NVIDIA A40 (48 GB)**. Do not start
+   any Pod whose name begins with `OLD-community`.
 3. Click **Start** for that same Pod.
 4. Wait for Runpod to show the Pod as **Running**.
 5. Allow roughly 2–5 minutes for Cloud Edition to check the cached files and
@@ -26,6 +28,12 @@ files live in the Pod's 150 GB persistent `/workspace` storage.
 8. Confirm **Video GPU** is set to **Runpod cloud GPU**.
 9. Click **Test**. Wait until the page says **Runpod ComfyUI connected**.
 10. Return to **Scene**, enter a prompt, and click **Generate**.
+
+The first generation after starting the Pod can spend several minutes loading
+the large text encoder and video model from persistent storage into RAM/VRAM.
+That is normal; later generations in the same running session reuse the loaded
+weights and start more quickly. Do not restart the Pod while the job says it is
+running and no error is shown.
 
 The saved Runpod API key, Pod ID, endpoint, and backend access token are reused
 from this computer. Do not replace them unless the Pod or local settings have
