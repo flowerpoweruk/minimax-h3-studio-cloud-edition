@@ -1,5 +1,7 @@
 # Minimax H3 Studio - Cloud Edition
 
+Already configured a Runpod Pod? Follow **[Starting Up Runpod Again Easily](starting%20up%20runpod%20again%20easily.md)** for the short Start → Test → Generate routine and the safe shutdown steps that preserve downloaded models.
+
 <p align="center">
   <img src="github-preview.png" alt="Minimax H3 Studio - Cloud Edition" width="640" />
 </p>
