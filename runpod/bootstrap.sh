@@ -10,6 +10,11 @@ MODELS="$RUNTIME/models"
 export DEBIAN_FRONTEND=noninteractive
 # Retry stalled package mirrors promptly; large model transfers use aria2 below.
 export UV_HTTP_TIMEOUT=60
+# Runpod persistent volumes are network filesystems. Package caches contain
+# thousands of tiny files and become extremely slow there, so keep uv's
+# disposable cache on the Pod's local disk. Models and the runtime still live
+# under /workspace and survive a stop/start cycle.
+export UV_CACHE_DIR="${UV_CACHE_DIR:-/tmp/minimax-h3-uv-cache}"
 
 mkdir -p "$RUNTIME" "$MODELS/diffusion_models" "$MODELS/text_encoders" "$MODELS/vae" "$MODELS/loras"
 apt-get update -qq

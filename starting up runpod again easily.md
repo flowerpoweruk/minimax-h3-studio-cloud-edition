@@ -48,7 +48,8 @@ files. Runpod may still charge a much smaller storage fee while it is stopped.
    after Cloud Edition or ComfyUI updates.
 3. Confirm the Pod still exposes these ports:
    - `8188/http` — authenticated Cloud Edition/ComfyUI endpoint
-   - `8888/http` — Jupyter (maintenance only)
+   - `8888/http` — reserved for optional maintenance tools (Jupyter is not
+     required and may not be running)
    - `22/tcp` — SSH (maintenance only)
 4. Confirm its container/start command still launches
    `runpod/bootstrap.sh` from this repository.
