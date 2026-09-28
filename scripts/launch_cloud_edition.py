@@ -59,7 +59,7 @@ def stop(process: subprocess.Popen | None) -> None:
 
 def main() -> int:
     if not PYTHON.is_file():
-        print("Run install-windows-cuda.bat first.")
+        print("Run install-cloud-client-windows.bat for Runpod, or install-windows-cuda.bat for local CUDA.")
         return 1
     local = provider() == "local"
     comfy = None

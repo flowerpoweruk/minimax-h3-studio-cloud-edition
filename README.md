@@ -4,38 +4,92 @@
   <img src="github-preview.png" alt="Minimax H3 Studio - Cloud Edition" width="640" />
 </p>
 
-A fork of [erdinoral/minimax-h3-studio](https://github.com/erdinoral/minimax-h3-studio) that adds a selectable **Runpod cloud GPU backend**, while preserving local NVIDIA/CUDA and the original Pinokio launcher. It runs [MiniMax H3](https://huggingface.co/MiniMaxAI/MiniMax-H3) in ComfyUI with **H3 Studio** (Director, Plan, cinema studio, TR/EN).
+A cloud-enabled fork of [erdinoral/minimax-h3-studio](https://github.com/erdinoral/minimax-h3-studio) built for people who want to run **MiniMax H3 without owning a local NVIDIA GPU**. The Studio interface runs on your Windows PC while ComfyUI, CUDA and all H3 inference run on a **Runpod Cloud GPU**.
 
-H3 is an omni-modal generative system: it takes text, images, video and audio as context and generates **video with native stereo audio** — 4–15 seconds, 24 FPS, 32 kHz stereo, in a wide range of aspect ratios (21:9 through 9:16). It handles 11 languages of spoken dialogue.
+Your computer does not download the H3 weights and does not need CUDA for the recommended cloud setup. The fork also keeps the upstream local-CUDA and Pinokio modes for users who want them.
 
-Default output is a 768-pixel short edge, but that is a default, not a limit — see [Resolution](#resolution--you-are-not-capped-at-768p) below for running at 1080p and up.
+MiniMax H3 accepts text, images, video and audio as context and generates video with native stereo audio. H3 Studio adds Director, Plan, Cinema Studio, queue management and a bilingual TR/EN interface.
 
-## Cloud Edition quick start
+## What Cloud Edition adds
 
-### Windows + CUDA (standalone, double-click)
+- **No local GPU required:** use the full Studio interface from an ordinary Windows PC or laptop.
+- **Managed Runpod Pods:** create, start, stop and test a Pod directly from Studio Settings.
+- **Private remote ComfyUI access:** managed Pods expose port 8188 through Runpod's proxy and require a generated bearer token.
+- **Persistent model storage:** keep the roughly 63 GB of H3 weights on a Pod volume or an optional Runpod network volume.
+- **Local mode preserved:** switch back to a locally installed NVIDIA/CUDA backend whenever you want.
 
-1. Double-click **`install-windows-cuda.bat`**. It installs Git/uv/Python 3.10 when needed, creates an isolated environment, installs the CUDA 13 stack, ComfyUI and required nodes, then downloads the H3 weights. Downloads are resumable.
-2. Double-click **`run-cloud-edition.bat`** whenever you want to start the application. The browser opens automatically; closing the launcher stops the local processes.
+| Runs on your computer | Runs on Runpod |
+|---|---|
+| H3 Studio web interface, settings, prompts, queue and gallery | NVIDIA GPU, CUDA 13, ComfyUI, custom nodes and H3 generation |
+| Small Python client environment | Roughly 63 GB of model weights plus the GPU software stack |
 
-The full local installation needs roughly 75 GB free. The installer validates that an NVIDIA driver is present before downloading the models.
+## Install on Windows — Runpod mode (no local GPU)
 
-### Pinokio (one click)
+Requirements: Windows 10 or 11, internet access, a [Runpod account](https://www.runpod.io/console/signup) with billing enabled, and a few GB of local disk space. An NVIDIA GPU and a local CUDA installation are **not** required.
 
-Install and start the repository as a normal Pinokio app. The existing **Install / Start / Update / Reset** flows remain available. When Runpod is selected in Studio Settings, the launcher starts Studio without occupying the local GPU.
+1. [Download the latest source ZIP](https://github.com/flowerpoweruk/minimax-h3-studio-cloud-edition/archive/refs/heads/main.zip) and extract the entire folder. Alternatively, clone this repository with Git.
+2. Double-click **`install-cloud-client-windows.bat`**. It installs uv and Python 3.10 when needed, creates an isolated environment and installs only the Studio client.
+3. Double-click **`run-cloud-edition.bat`**. The browser opens H3 Studio automatically.
+4. Open **Settings → Compute backend** and complete the Runpod setup below.
 
-### Runpod cloud GPU
+The installer deliberately does not install ComfyUI, CUDA, PyTorch or H3 model files on your computer. Those are installed on the managed Pod when it is first created.
 
-1. Start Cloud Edition and open **Settings → Compute backend**.
-2. Select **Runpod cloud GPU** and paste a Runpod API key.
-3. Either enter an existing Pod ID + ComfyUI endpoint/token, or click **Create managed Pod**. The managed option provisions a CUDA 13 Pod, creates an authenticated ComfyUI proxy, and downloads both H3 variants to persistent storage.
-4. Wait for the first setup to finish (about 64 GB of weights), then click **Test**. A green connection status means all Studio generation features now use the Runpod GPU.
-5. Click **Stop Pod** when idle to stop GPU billing. A network volume ID is recommended when you want the model cache to survive moving between machines; otherwise the managed Pod uses a persistent Pod volume.
+## Set up Runpod
 
-Secrets are saved only in `studio/data/runpod_settings.json`, which is ignored by Git. The managed Pod's public Runpod proxy rejects requests that do not carry the generated bearer token.
+### 1. Create an API key
+
+1. Sign in to the [Runpod Console](https://www.runpod.io/console/user/settings).
+2. Open **Settings → API Keys**, create a key and copy it. Runpod's official introduction also links its current [API-key instructions](https://docs.runpod.io/).
+3. In H3 Studio, open **Settings → Compute backend**, select **Runpod cloud GPU**, paste the API key and click **Save & connect**.
+
+The API key is used by your local Studio only to manage your Pod. It is stored in the Git-ignored `studio/data/runpod_settings.json` file and is never committed to the repository.
+
+### 2. Create a managed Pod (recommended)
+
+The defaults are ready for H3:
+
+- **GPU:** `NVIDIA RTX A6000` (48 GB). You can replace this with another available Runpod GPU ID with sufficient VRAM.
+- **Cloud:** Secure Cloud. Community Cloud can also be selected.
+- **Persistent volume:** 150 GB, mounted at `/workspace`.
+- **Network volume ID:** optional. Enter an existing Runpod network-volume ID if you want the installation and models to be portable between compatible Pods.
+
+Click **Create managed Pod**. Cloud Edition provisions the Pod, clones this fork, installs the CUDA/ComfyUI stack, downloads both supported H3 model variants and starts an authenticated ComfyUI proxy on port 8188. The first setup downloads roughly 64 GB and can take a while.
+
+When setup finishes, click **Test**. A green connection status means generation requests are using the Runpod GPU. Runpod documents Pod creation and the `https://<pod-id>-<port>.proxy.runpod.net` address format in its [Pod management reference](https://docs.runpod.io/runpodctl/reference/runpodctl-remove-pods).
+
+### 3. Generate and stop the Pod when finished
+
+Use H3 Studio normally—the generation controls do not change between local and cloud modes. Click **Stop Pod** in Settings when you are finished so active GPU compute stops. Your persistent or network volume remains available for later starts; storage charges may continue according to your Runpod plan.
+
+If a stopped Pod cannot reacquire its original GPU, choose another compatible GPU or use a network volume with a new Pod. See Runpod's [zero-GPU restart guidance](https://docs.runpod.io/pods/troubleshooting/zero-gpus).
+
+### Use an existing Runpod Pod instead
+
+Advanced users can connect an existing Pod:
+
+1. Run a ComfyUI-compatible server on the Pod and expose HTTP port 8188.
+2. Enter the **Pod ID**. If Endpoint URL is blank, Studio derives `https://<pod-id>-8188.proxy.runpod.net` automatically.
+3. Enter the bearer token expected by that endpoint, then click **Save & connect** and **Test**.
+
+The managed-Pod option is recommended because it installs the exact nodes, workflows and model layout expected by this fork and configures authentication automatically.
+
+## Other installation options
+
+### Local NVIDIA/CUDA
+
+To run inference on your own NVIDIA GPU, double-click **`install-windows-cuda.bat`**, then **`run-cloud-edition.bat`**. The full local installation needs roughly 75 GB of disk space and validates that an NVIDIA driver is present before downloading the models.
+
+### Pinokio
+
+The upstream-style Pinokio **Install / Start / Update / Reset** flow remains available for local NVIDIA installations. If the app is already installed through Pinokio, selecting Runpod in Studio Settings makes Start launch Studio without starting local ComfyUI. For a computer with no local GPU, use the lightweight Windows cloud-client installer above.
+
+Default output uses a 768-pixel short edge, but that is a default rather than a limit—see [Resolution](#resolution--you-are-not-capped-at-768p) for 1080p and higher output.
 
 ---
 
-## What this launcher installs
+## What gets installed on the GPU machine
+
+In Runpod mode, these files are installed on the Pod—not on your PC. In local CUDA mode, they are installed locally.
 
 | Component | File | Size |
 |---|---|---|
@@ -71,17 +125,16 @@ In practice ComfyUI's current `requirements.txt` **already** resolves to a CUDA 
 
 The local `torch.js` also exists because the **stock** `system/examples/torch.js` pins `torch 2.7.0+cu128`, which *would* silently break the quantized path.
 
-### Requirements
+### GPU-machine requirements
 
-- **NVIDIA GPU.** The quantized weights and the cu130 kernels are CUDA-specific. 32 GB VRAM comfortably runs one model at a time; less will work via ComfyUI's automatic offloading, but slower.
-- ~75 GB free disk.
-- Linux or Windows.
+- **Runpod mode:** an NVIDIA Runpod GPU and at least 80 GB of persistent storage; the managed default is a 48 GB RTX A6000 with 150 GB storage.
+- **Local mode:** an NVIDIA GPU, current driver and roughly 75 GB of free local disk. The quantized weights and cu130 kernels are CUDA-specific. 32 GB VRAM comfortably runs one model at a time; less can use ComfyUI offloading but will be slower.
 
 ---
 
 ## H3 Studio (custom UI)
 
-Start opens **ComfyUI** (backend) and **H3 Studio** (simple front end). Top bar **TR | EN** switches the Studio UI and Director chat language (`h3Prompt` / SCENE stays English). Pinokio menu:
+Start opens **H3 Studio** and connects it to the selected compute backend. Local mode also starts ComfyUI on the PC; Runpod mode connects to ComfyUI on the Pod and leaves the local GPU untouched. Top bar **TR | EN** switches the Studio UI and Director chat language (`h3Prompt` / SCENE stays English). Pinokio menu:
 
 | Menu | Opens |
 |---|---|
@@ -124,9 +177,9 @@ Studio talks to Comfy at the URL captured on start (`COMFY_URL`). Bottom bar sho
 
 ## Usage
 
-1. **Install** — clones ComfyUI, installs deps + cu130 torch, downloads all weights, installs workflows, and Studio Python deps.
-2. **Start** — launches ComfyUI + H3 Studio; menu switches to **Open H3 Studio** (and **Open ComfyUI**).
-3. In Comfy: open the **Workflows** tab and pick one — models are already selected, nothing to wire up:
+1. **Install** — the cloud-client installer installs only Studio on the PC. The managed Runpod bootstrap installs ComfyUI, cu130 dependencies, workflows and weights on the Pod. The local-CUDA/Pinokio installer puts that full stack on the PC instead.
+2. **Start** — launches H3 Studio and either connects to Runpod or starts local ComfyUI, according to **Settings → Compute backend**.
+3. In ComfyUI, the bundled workflows already have their models selected:
 
 | Workflow | Mode | Transformer |
 |---|---|---|
