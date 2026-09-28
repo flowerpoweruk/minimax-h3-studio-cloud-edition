@@ -12,7 +12,7 @@ export UV_HTTP_TIMEOUT=1200
 
 mkdir -p "$RUNTIME" "$MODELS/diffusion_models" "$MODELS/text_encoders" "$MODELS/vae" "$MODELS/loras"
 apt-get update -qq
-apt-get install -y -qq git ffmpeg curl
+apt-get install -y -qq git ffmpeg curl aria2
 if ! command -v uv >/dev/null 2>&1; then
   python -m pip install -q --upgrade uv
 fi
@@ -75,8 +75,10 @@ download_model() {
   local target="$dest/$file" partial="$dest/$file.partial"
   mkdir -p "$(dirname "$target")"
   echo "[H3 Cloud] downloading: $file"
-  curl --fail --location --retry 8 --retry-all-errors \
-    --continue-at - --output "$partial" \
+  aria2c --allow-overwrite=true --auto-file-renaming=false --continue=true \
+    --max-connection-per-server=16 --split=16 --min-split-size=16M \
+    --file-allocation=none --dir="$(dirname "$partial")" \
+    --out="$(basename "$partial")" \
     "https://huggingface.co/$repo/resolve/main/$file?download=true"
   mv "$partial" "$target"
 }
@@ -89,8 +91,12 @@ download_model Comfy-Org/MiniMax-H3 \
   vae/minimax_h3_audio_vae_fp32.safetensors "$MODELS"
 download_model Comfy-Org/MiniMax-H3 \
   diffusion_models/minimax_h3_fl2va_pruned_int8_convrot.safetensors "$MODELS"
-download_model Comfy-Org/MiniMax-H3 \
-  diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors "$MODELS"
+if [[ "${H3_DOWNLOAD_REF2V:-0}" == "1" ]]; then
+  download_model Comfy-Org/MiniMax-H3 \
+    diffusion_models/minimax_h3_ref2va_pruned_int8_convrot.safetensors "$MODELS"
+else
+  echo "[H3 Cloud] reference-video model deferred (set H3_DOWNLOAD_REF2V=1 to install it)"
+fi
 
 if [[ -z "${H3_CLOUD_TOKEN:-}" ]]; then
   echo "H3_CLOUD_TOKEN is required" >&2
