@@ -8,7 +8,8 @@ ENV_DIR="$RUNTIME/env"
 MODELS="$RUNTIME/models"
 
 export DEBIAN_FRONTEND=noninteractive
-export UV_HTTP_TIMEOUT=1200
+# Retry stalled package mirrors promptly; large model transfers use aria2 below.
+export UV_HTTP_TIMEOUT=60
 
 mkdir -p "$RUNTIME" "$MODELS/diffusion_models" "$MODELS/text_encoders" "$MODELS/vae" "$MODELS/loras"
 apt-get update -qq
