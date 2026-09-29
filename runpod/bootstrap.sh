@@ -34,7 +34,7 @@ for candidate in "$(command -v python 2>/dev/null || true)" \
   "$(command -v python3 2>/dev/null || true)" \
   /usr/local/bin/python /usr/local/bin/python3 /usr/bin/python3 /venv/main/bin/python; do
   if [[ -n "$candidate" && -x "$candidate" ]] && \
-    "$candidate" -c 'import torch, torchvision; assert torch.__version__.startswith("2.9.")' >/dev/null 2>&1; then
+    "$candidate" -c 'import torch; assert torch.__version__.startswith("2.9.")' >/dev/null 2>&1; then
     BASE_PYTHON="$candidate"
     break
   fi
@@ -61,7 +61,13 @@ awk '!/^[[:space:]]*(torch|torchvision|torchaudio)([[:space:]<>=!~].*)?$/' \
   "$COMFY/requirements.txt" > "$FILTERED_COMFY_REQUIREMENTS"
 uv pip install --python "$H3_PYTHON" -r "$FILTERED_COMFY_REQUIREMENTS"
 uv pip install --python "$H3_PYTHON" -r "$ROOT/studio/requirements.txt"
-"$H3_PYTHON" -c 'import torch, torchvision; assert torch.__version__.startswith("2.9.")'
+# The current Runpod torch291 image does not consistently include torchvision.
+# Install its small matching wheel without dependencies, which makes it
+# impossible for the resolver to fetch or replace Torch/CUDA.
+if ! "$H3_PYTHON" -c 'import torchvision; assert torchvision.__version__.startswith("0.24.")' >/dev/null 2>&1; then
+  uv pip install --python "$H3_PYTHON" --no-deps torchvision==0.24.1
+fi
+"$H3_PYTHON" -c 'import torch, torchvision; assert torch.__version__.startswith("2.9."); assert torchvision.__version__.startswith("0.24.")'
 
 for spec in \
   "https://github.com/ltdrdata/ComfyUI-Manager|ComfyUI-Manager" \
