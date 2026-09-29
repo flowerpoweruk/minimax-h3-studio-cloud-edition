@@ -103,9 +103,9 @@ safe_install_requirements() {
   uv pip compile --python-version 3.12 --no-header --no-annotate \
     --output-file "$compiled" "$combined"
   awk 'BEGIN { IGNORECASE=1 }
-    !/^(torch|torchvision|torchaudio|triton|pytorch-triton|nvidia-[a-z0-9-]+|cuda-bindings|cuda-pathfinder)(\[.*\])?([<>=!~ ].*)?$/' \
+    !/^[[:space:]]*(torch|torchvision|torchaudio|triton|pytorch-triton|nvidia-[a-z0-9-]+|cuda-bindings|cuda-pathfinder)(\[.*\])?([<>=!~ ].*)?$/' \
     "$compiled" > "$safe"
-  if grep -Eiq '^(torch|torchvision|torchaudio|triton|pytorch-triton|nvidia-|cuda-)' "$safe"; then
+  if grep -Eiq '^[[:space:]]*(torch|torchvision|torchaudio|triton|pytorch-triton|nvidia-|cuda-)' "$safe"; then
     echo "[H3 Cloud] ERROR: GPU runtime package escaped the dependency filter." >&2
     exit 1
   fi
