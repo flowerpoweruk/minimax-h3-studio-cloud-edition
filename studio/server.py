@@ -2325,20 +2325,23 @@ async def cancel_job(job_id: str):
             slog.info_job(job, "queued job cancelled")
             return {"ok": True, "id": job_id, "status": "cancelled"}
 
-    # Studio runs one active render at a time. Interrupting here leaves every
-    # other queued job intact; the queue loop will continue with the next one.
-    try:
-        await comfy.interrupt()
-    except Exception as e:
-        raise HTTPException(500, str(e))
     async with _lock:
         job = next((j for j in _jobs if j["id"] == job_id), None)
         if not job or job.get("status") != "running":
             raise HTTPException(409, "iş artık üretimde değil")
+        prompt_id = str(job.get("prompt_id") or "").strip()
         job["status"] = "cancelled"
         job["error"] = "iptal"
         job["progress_label"] = "iptal"
         _save_jobs()
+    # Cancel exactly this Comfy prompt.  It may be running or pending behind a
+    # stale external prompt; Comfy's targeted endpoint handles either state.
+    if prompt_id:
+        try:
+            await comfy.cancel_prompt(prompt_id)
+        except Exception as e:
+            slog.warn_job(job, "targeted Comfy cancel failed", err=e)
+            raise HTTPException(500, str(e))
     slog.info_job(job, "running job cancelled")
     return {"ok": True, "id": job_id, "status": "cancelled"}
 
@@ -3163,11 +3166,8 @@ async def clear_jobs(body: ClearJobsBody):
 @app.post("/api/interrupt")
 async def interrupt(cancel_queued: bool = False):
     """Stop the running Comfy job. Queued batch stays unless cancel_queued=true."""
-    try:
-        await comfy.interrupt()
-    except Exception as e:
-        raise HTTPException(500, str(e))
     cancelled = []
+    prompt_ids = []
     async with _lock:
         for j in _jobs:
             if j["status"] == "running":
@@ -3175,12 +3175,19 @@ async def interrupt(cancel_queued: bool = False):
                 j["error"] = "iptal"
                 j["progress_label"] = "iptal"
                 cancelled.append(j["id"])
+                if j.get("prompt_id"):
+                    prompt_ids.append(str(j["prompt_id"]))
             elif cancel_queued and j["status"] == "queued":
                 j["status"] = "cancelled"
                 j["error"] = "iptal"
                 j["progress_label"] = "iptal"
                 cancelled.append(j["id"])
         _save_jobs()
+    try:
+        for prompt_id in prompt_ids:
+            await comfy.cancel_prompt(prompt_id)
+    except Exception as e:
+        raise HTTPException(500, str(e))
     return {"ok": True, "cancelled": cancelled, "cancel_queued": cancel_queued}
 
 
@@ -8304,6 +8311,8 @@ async def _run_job(job: dict):
         job["progress"] = 10
         job["progress_label"] = "Comfy kuyruğa"
         _save_jobs()
+        if job.get("status") == "cancelled":
+            return
         prompt_id = await comfy.queue_prompt(prompt)
         job["prompt_id"] = prompt_id
         job["progress"] = 12
@@ -8469,7 +8478,14 @@ async def _run_job(job: dict):
                 except Exception:
                     queue_peek_ok = False
 
-            mins, secs = divmod(tick, 60)
+            elapsed = max(
+                0,
+                int(
+                    time.time()
+                    - float(job.get("started_at") or job.get("created_at") or time.time())
+                ),
+            )
+            mins, secs = divmod(elapsed, 60)
             clock = f"{mins}m{secs:02d}s" if mins else f"{secs}s"
 
             ws_fresh = (time.time() - float(job.get("_ws_progress_at") or 0)) < 8.0

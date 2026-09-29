@@ -316,9 +316,29 @@ class ComfyClient:
             return "VRAM yetersiz (CUDA OOM)"
         return (compact[-400:] if len(compact) > 400 else compact) or "Comfy execution error"
 
-    async def interrupt(self) -> None:
+    async def cancel_prompt(self, prompt_id: str) -> bool:
+        """Cancel exactly one running or pending Comfy prompt.
+
+        The pinned ComfyUI API classifies the prompt atomically, interrupting a
+        running prompt or removing a pending one.  Using the legacy global
+        ``/interrupt`` endpoint here can stop an unrelated prompt and leave the
+        intended pending prompt orphaned in Comfy's queue.
+        """
+        prompt_id = str(prompt_id or "").strip()
+        if not prompt_id:
+            return False
+        async with httpx.AsyncClient(timeout=15.0, headers=self.headers) as c:
+            r = await c.post(f"{self.base_url}/api/jobs/{prompt_id}/cancel")
+            r.raise_for_status()
+            data = r.json() if r.content else {}
+            return bool(data.get("cancelled"))
+
+    async def interrupt(self, prompt_id: Optional[str] = None) -> None:
+        """Interrupt one prompt when known; global interrupt is legacy fallback."""
+        payload = {"prompt_id": prompt_id} if prompt_id else None
         async with httpx.AsyncClient(timeout=10.0, headers=self.headers) as c:
-            await c.post(f"{self.base_url}/interrupt")
+            r = await c.post(f"{self.base_url}/interrupt", json=payload)
+            r.raise_for_status()
 
     async def free_memory(self, *, unload_models: bool = True) -> bool:
         """Unload H3 weights and empty CUDA cache (ComfyUI POST /free)."""
