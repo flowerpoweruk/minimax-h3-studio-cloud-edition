@@ -10743,7 +10743,11 @@ async function pullCinemaLibraryAsset(kind, libraryId) {
     const saved = await saveRunpodSettings({ quiet: true });
     if (!saved) return;
     const data = await runpodRequest("/api/runpod/pod/create", "Creating managed Runpod Pod…");
-    if (data) setRunpodStatus(`Pod ${data.pod_id || data.pod?.id || "created"} is installing H3. This first setup downloads about 64 GB.`, "");
+    if (data) setRunpodStatus(
+      `Pod ${data.pod_id || data.pod?.id || "created"} is pulling the prebuilt Cloud Edition image. ` +
+      "Models already on the Network Volume are reused; only missing model files are downloaded.",
+      ""
+    );
   });
   $("btn-runpod-start")?.addEventListener("click", async () => {
     const saved = await saveRunpodSettings({ quiet: true });

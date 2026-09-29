@@ -243,7 +243,8 @@ class RunpodCloud:
         else:
             message = (
                 f"Pod {self.pod_id} is running, but ComfyUI has not responded at {self.comfy_url}. "
-                "If this is a managed Pod, its first setup may still be downloading the H3 models."
+                "A managed Pod may still be pulling the prebuilt image or checking its persistent "
+                "model files; it downloads only models missing from the Network Volume."
             )
             code = "comfy_not_ready"
         return {

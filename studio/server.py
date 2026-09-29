@@ -2090,36 +2090,42 @@ async def system_stats():
         "multishot": detect_multishot_pack(COMFY_ROOT),
         "vfi_model": detect_vfi_model(COMFY_ROOT) or "",
     }
-    # 1) Accurate board VRAM + util
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            "nvidia-smi",
-            "--query-gpu=name,memory.used,memory.total,utilization.gpu",
-            "--format=csv,noheader,nounits",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
-        stdout, _ = await proc.communicate()
-        line = stdout.decode("utf-8", errors="ignore").strip().split("\n")[0]
-        parts = [p.strip() for p in line.split(",")]
-        if len(parts) >= 4:
-            out["gpu_name"] = parts[0]
-            used = float(parts[1]) / 1024.0
-            total = float(parts[2]) / 1024.0
-            out["vram_used_gb"] = round(used, 2)
-            out["vram_total_gb"] = round(total, 2)
-            out["vram_percent"] = round(100.0 * used / total, 1) if total else 0
-            out["gpu_util"] = float(parts[3])
-    except Exception:
-        pass
-    # 2) Comfy online + name fallback only (do NOT trust its VRAM numbers)
+    # 1) Accurate local board VRAM + util. Never report the local board when
+    # Comfy is configured for Runpod; that made remote jobs look local.
+    if runpod_cloud.provider != "runpod":
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "nvidia-smi",
+                "--query-gpu=name,memory.used,memory.total,utilization.gpu",
+                "--format=csv,noheader,nounits",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            stdout, _ = await proc.communicate()
+            line = stdout.decode("utf-8", errors="ignore").strip().split("\n")[0]
+            parts = [p.strip() for p in line.split(",")]
+            if len(parts) >= 4:
+                out["gpu_name"] = parts[0]
+                used = float(parts[1]) / 1024.0
+                total = float(parts[2]) / 1024.0
+                out["vram_used_gb"] = round(used, 2)
+                out["vram_total_gb"] = round(total, 2)
+                out["vram_percent"] = round(100.0 * used / total, 1) if total else 0
+                out["gpu_util"] = float(parts[3])
+        except Exception:
+            pass
+    # 2) Comfy online + remote GPU identity/VRAM (or local name fallback).
     try:
         stats = await comfy.system_stats()
         out["comfy_online"] = True
         devices = stats.get("devices") or []
-        if devices and not out.get("gpu_name"):
+        if devices and (
+            runpod_cloud.provider == "runpod" or not out.get("gpu_name")
+        ):
             out["gpu_name"] = (devices[0].get("name") or "").replace("cuda:0 ", "")
-        if out.get("vram_used_gb") is None and devices:
+        if devices and (
+            runpod_cloud.provider == "runpod" or out.get("vram_used_gb") is None
+        ):
             d0 = devices[0]
             total = d0.get("vram_total") or 0
             free = d0.get("vram_free") or 0
