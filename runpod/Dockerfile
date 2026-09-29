@@ -12,6 +12,7 @@ ARG H3_MULTISHOT_REF=d7d197709fc93c1afb125e3db1dfd4ac0ae28c60
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_CACHE_DIR=1 \
+    PATH=/opt/h3-cloud/venv/bin:$PATH \
     H3_COMFY_ROOT=/opt/ComfyUI \
     H3_MODELS_DIR=/workspace/h3-runtime/models \
     H3_OUTPUT_DIR=/workspace/h3-output \
@@ -40,11 +41,12 @@ COPY runpod/requirements.lock /opt/h3-cloud/requirements.lock
 # The base image owns the CUDA 13 / PyTorch 2.9.1 stack. The hashed lock was
 # resolved with all Torch, CUDA and NVIDIA runtime packages explicitly excluded,
 # so this build cannot accidentally download or replace the GPU stack.
-RUN python -m pip install --no-deps \
+RUN python -m venv --system-site-packages /opt/h3-cloud/venv \
+    && /opt/h3-cloud/venv/bin/python -m pip install --no-deps \
       'https://files.pythonhosted.org/packages/93/b1/db2941526ecddd84884132e2742a55c9311296a6a38627f9e2627f5ac889/torchvision-0.24.1-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=66a98471fc18cad9064123106d810a75f57f0838eee20edc56233fd8484b0cc7' \
-    && python -m pip install --require-hashes -r /opt/h3-cloud/requirements.lock \
-    && python -c "import torch, torchvision; assert torch.__version__.startswith('2.9.1'); assert torchvision.__version__.startswith('0.24.1'); print(torch.__version__, torch.version.cuda)" \
-    && python -m pip check
+    && /opt/h3-cloud/venv/bin/python -m pip install --require-hashes -r /opt/h3-cloud/requirements.lock \
+    && /opt/h3-cloud/venv/bin/python -c "import torch, torchvision; assert torch.__version__.startswith('2.9.1'); assert torchvision.__version__.startswith('0.24.1'); print(torch.__version__, torch.version.cuda)" \
+    && /opt/h3-cloud/venv/bin/python -m pip check
 
 COPY custom_nodes/minimax_h3_pinokio /opt/ComfyUI/custom_nodes/minimax_h3_cloud
 COPY workflows /opt/ComfyUI/user/default/workflows
