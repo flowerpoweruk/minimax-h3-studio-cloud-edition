@@ -87,8 +87,32 @@ FILTERED_COMFY_REQUIREMENTS="$(mktemp)"
 trap 'rm -f "$FILTERED_COMFY_REQUIREMENTS"' EXIT
 awk '!/^[[:space:]]*(torch|torchvision|torchaudio)([[:space:]<>=!~].*)?$/' \
   "$COMFY/requirements.txt" > "$FILTERED_COMFY_REQUIREMENTS"
-uv pip install --python "$H3_PYTHON" -r "$FILTERED_COMFY_REQUIREMENTS"
-uv pip install --python "$H3_PYTHON" -r "$ROOT/studio/requirements.txt"
+
+# Resolve transitive application dependencies, strip every GPU-runtime package,
+# then install the resulting lock without dependency expansion. This is a hard
+# guarantee that a transitive requirement can never make uv fetch Torch/CUDA.
+safe_install_requirements() {
+  local combined compiled safe file
+  combined="$(mktemp)"
+  compiled="$(mktemp)"
+  safe="$(mktemp)"
+  for file in "$@"; do
+    cat "$file" >> "$combined"
+    printf '\n' >> "$combined"
+  done
+  uv pip compile --python-version 3.12 --no-header --no-annotate \
+    --output-file "$compiled" "$combined"
+  awk 'BEGIN { IGNORECASE=1 }
+    !/^(torch|torchvision|torchaudio|triton|pytorch-triton|nvidia-[a-z0-9-]+|cuda-bindings|cuda-pathfinder)(\[.*\])?([<>=!~ ].*)?$/' \
+    "$compiled" > "$safe"
+  if grep -Eiq '^(torch|torchvision|torchaudio|triton|pytorch-triton|nvidia-|cuda-)' "$safe"; then
+    echo "[H3 Cloud] ERROR: GPU runtime package escaped the dependency filter." >&2
+    exit 1
+  fi
+  uv pip install --python "$H3_PYTHON" --no-deps -r "$safe"
+  rm -f "$combined" "$compiled" "$safe"
+}
+safe_install_requirements "$FILTERED_COMFY_REQUIREMENTS" "$ROOT/studio/requirements.txt"
 # The current Runpod torch291 image does not consistently include torchvision.
 # Install its small matching wheel without dependencies, which makes it
 # impossible for the resolver to fetch or replace Torch/CUDA.
@@ -110,7 +134,7 @@ for spec in \
     git -C "$dest" pull --ff-only
   fi
 done
-uv pip install --python "$H3_PYTHON" -r "$COMFY/custom_nodes/ComfyUI-KJNodes/requirements.txt"
+safe_install_requirements "$COMFY/custom_nodes/ComfyUI-KJNodes/requirements.txt"
 
 # Never replace the image's bundled CUDA/PyTorch packages during Pod startup.
 # If GPU initialization fails, abort cheaply and surface the real error.
