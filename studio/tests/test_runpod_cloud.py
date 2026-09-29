@@ -70,6 +70,20 @@ class RunpodCloudTests(unittest.TestCase):
         self.assertNotIn("args", body)
         self.assertTrue(body["image"].startswith("ghcr.io/flowerpoweruk/"))
 
+    def test_network_volume_rejects_community_cloud_before_api_call(self):
+        cloud = RecordingRunpodCloud(self.path)
+        cloud.save(
+            {
+                "provider": "runpod",
+                "api_key": "rpa_test",
+                "cloud_type": "COMMUNITY",
+                "network_volume_id": "network-volume-123",
+            }
+        )
+        with self.assertRaisesRegex(ValueError, "require Secure Cloud"):
+            asyncio.run(cloud.create_pod())
+        self.assertEqual(cloud.calls, [])
+
     def test_legacy_stock_image_is_migrated_to_prebuilt_runtime(self):
         self.path.write_text(
             json.dumps({"image": "runpod/pytorch:1.0.3-cu1300-torch291-ubuntu2404"}),

@@ -295,10 +295,17 @@ class RunpodCloud:
     async def create_pod(self) -> dict[str, Any]:
         token = self.ensure_access_token()
         settings = self._settings
+        cloud_type = str(settings.get("cloud_type") or "SECURE").upper()
+        network_volume_id = str(settings.get("network_volume_id") or "").strip()
+        if network_volume_id and cloud_type != "SECURE":
+            raise ValueError(
+                "Runpod Network Volumes require Secure Cloud. Select Secure Cloud "
+                "or clear the Network Volume ID before creating a Pod."
+            )
         body: dict[str, Any] = {
             "name": "minimax-h3-studio-cloud-edition",
             "image": settings.get("image") or DEFAULT_IMAGE,
-            "cloud": settings.get("cloud_type") or "SECURE",
+            "cloud": cloud_type,
             "disk": 40,
             "ports": ["8188/http"],
             "startSsh": False,
@@ -315,7 +322,6 @@ class RunpodCloud:
                 "allowedCudaVersions": ["13.0"],
             },
         }
-        network_volume_id = str(settings.get("network_volume_id") or "").strip()
         if network_volume_id:
             body["mounts"] = {
                 "network": [{"volumeId": network_volume_id, "path": "/workspace"}]
