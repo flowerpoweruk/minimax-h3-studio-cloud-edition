@@ -57,6 +57,8 @@ Prefer Runpod's migration option. If migration is unavailable:
 
 The replacement uses the same prebuilt Cloud Edition image and the same model
 volume. There is no dependency installation and no repeat model download.
+Studio checks the volume first and restricts the new Pod to that volume's
+datacenter before it sends Runpod the create request.
 
 An ordinary Network Volume is tied to its data center. You may select any
 compatible GPU available in that data center. If the GPU you want is available

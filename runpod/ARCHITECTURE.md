@@ -69,6 +69,11 @@ in Secure Cloud and is tied to one data center. Consequently, GPU switching is
 easy among compatible GPUs available in that data center, but the volume does
 not expand GPU choice to other data centers.
 
+Before sending a create-Pod request, Studio reads the configured Network Volume
+through Runpod's API, rejects Community Cloud, and adds the volume's datacenter
+as an explicit placement constraint. An invalid volume ID or missing placement
+metadata therefore fails before Runpod creates a billable Pod.
+
 ### High-performance Network Volume — optional faster cold model load
 
 Runpod documents up to 3x throughput and 4x IOPS compared with standard network
