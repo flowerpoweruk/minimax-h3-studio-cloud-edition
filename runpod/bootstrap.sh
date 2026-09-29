@@ -29,11 +29,13 @@ else
   git -C "$COMFY" pull --ff-only
 fi
 
-uv venv "$ENV_DIR" --python "$(command -v python)" --system-site-packages
-# Install into the official image's existing Python environment so uv treats its
-# CUDA-enabled torch as satisfied. The venv above inherits these system packages.
-uv pip install --system --break-system-packages -r "$COMFY/requirements.txt"
-uv pip install --system --break-system-packages -r "$ROOT/studio/requirements.txt"
+uv venv "$ENV_DIR" --python "$(command -v python)" --system-site-packages --allow-existing
+# Keep installed packages on /workspace with the model volume. Installing into
+# the container's system Python made every replacement/migrated Pod download the
+# full ComfyUI/CUDA dependency stack again. The persistent venv reuses packages
+# on later Pods while still seeing any CUDA-enabled torch supplied by the image.
+uv pip install --python "$ENV_DIR/bin/python" -r "$COMFY/requirements.txt"
+uv pip install --python "$ENV_DIR/bin/python" -r "$ROOT/studio/requirements.txt"
 
 for spec in \
   "https://github.com/ltdrdata/ComfyUI-Manager|ComfyUI-Manager" \
@@ -48,7 +50,7 @@ for spec in \
     git -C "$dest" pull --ff-only
   fi
 done
-uv pip install --system --break-system-packages -r "$COMFY/custom_nodes/ComfyUI-KJNodes/requirements.txt"
+uv pip install --python "$ENV_DIR/bin/python" -r "$COMFY/custom_nodes/ComfyUI-KJNodes/requirements.txt"
 
 # Official Runpod PyTorch images already include a CUDA build tuned for their
 # driver/GPU. Reusing it avoids a multi-gigabyte reinstall on every Pod. Fall
