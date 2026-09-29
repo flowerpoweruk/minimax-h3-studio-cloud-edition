@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="/workspace/minimax-h3-cloud"
 RUNTIME="/workspace/h3-runtime"
 COMFY="$RUNTIME/ComfyUI"
-ENV_DIR="$RUNTIME/env"
+ENV_DIR="$RUNTIME/env-runpod-torch291-v2"
 MODELS="$RUNTIME/models"
 
 export DEBIAN_FRONTEND=noninteractive
@@ -29,22 +29,39 @@ else
   git -C "$COMFY" pull --ff-only
 fi
 
-if [[ -x /venv/main/bin/python ]] && /venv/main/bin/python -c 'import torch; assert torch.cuda.is_available()' >/dev/null 2>&1; then
-  # Official Runpod PyTorch images keep their CUDA environment here. The old
-  # --system install bypassed it and downloaded torch plus the entire CUDA stack
-  # again. Install only genuinely missing packages into the supplied venv.
-  H3_PYTHON="/venv/main/bin/python"
-  echo "[H3 Cloud] using Runpod's prebuilt CUDA/PyTorch environment"
-  uv pip install --python "$H3_PYTHON" -r "$COMFY/requirements.txt"
-  uv pip install --python "$H3_PYTHON" -r "$ROOT/studio/requirements.txt"
-else
-  uv venv "$ENV_DIR" --python "$(command -v python)" --system-site-packages --allow-existing
-  # Fallback for third-party/base images: install once into the network volume,
-  # so a later replacement Pod reuses the same environment.
-  uv pip install --python "$ENV_DIR/bin/python" -r "$COMFY/requirements.txt"
-  uv pip install --python "$ENV_DIR/bin/python" -r "$ROOT/studio/requirements.txt"
-  H3_PYTHON="$ENV_DIR/bin/python"
+BASE_PYTHON=""
+for candidate in "$(command -v python 2>/dev/null || true)" \
+  "$(command -v python3 2>/dev/null || true)" \
+  /usr/local/bin/python /usr/local/bin/python3 /usr/bin/python3 /venv/main/bin/python; do
+  if [[ -n "$candidate" && -x "$candidate" ]] && \
+    "$candidate" -c 'import torch, torchvision; assert torch.__version__.startswith("2.9.")' >/dev/null 2>&1; then
+    BASE_PYTHON="$candidate"
+    break
+  fi
+done
+
+if [[ -z "$BASE_PYTHON" ]]; then
+  echo "[H3 Cloud] ERROR: this image does not expose its bundled PyTorch 2.9 Python." >&2
+  echo "[H3 Cloud] Refusing to download a replacement multi-gigabyte CUDA stack." >&2
+  exit 1
 fi
+
+echo "[H3 Cloud] using bundled PyTorch from $BASE_PYTHON"
+"$BASE_PYTHON" -c 'import torch; print(f"[H3 Cloud] bundled torch {torch.__version__} / CUDA {torch.version.cuda}")'
+
+# Keep all non-CUDA Python dependencies on the network volume. The Runpod image
+# installs Torch in its system Python (not /venv/main). Inherit that installation
+# and explicitly remove Torch packages from ComfyUI's requirements so uv can
+# never replace them with another multi-gigabyte CUDA stack.
+uv venv "$ENV_DIR" --python "$BASE_PYTHON" --system-site-packages --allow-existing
+H3_PYTHON="$ENV_DIR/bin/python"
+FILTERED_COMFY_REQUIREMENTS="$(mktemp)"
+trap 'rm -f "$FILTERED_COMFY_REQUIREMENTS"' EXIT
+awk '!/^[[:space:]]*(torch|torchvision|torchaudio)([[:space:]<>=!~].*)?$/' \
+  "$COMFY/requirements.txt" > "$FILTERED_COMFY_REQUIREMENTS"
+uv pip install --python "$H3_PYTHON" -r "$FILTERED_COMFY_REQUIREMENTS"
+uv pip install --python "$H3_PYTHON" -r "$ROOT/studio/requirements.txt"
+"$H3_PYTHON" -c 'import torch, torchvision; assert torch.__version__.startswith("2.9.")'
 
 for spec in \
   "https://github.com/ltdrdata/ComfyUI-Manager|ComfyUI-Manager" \
@@ -61,16 +78,9 @@ for spec in \
 done
 uv pip install --python "$H3_PYTHON" -r "$COMFY/custom_nodes/ComfyUI-KJNodes/requirements.txt"
 
-# Official Runpod PyTorch images already include a CUDA build tuned for their
-# driver/GPU. Reusing it avoids a multi-gigabyte reinstall on every Pod. Fall
-# back to Cloud Edition's CUDA 13 build only for bare images without CUDA torch.
-if "$H3_PYTHON" -c 'import torch; assert torch.cuda.is_available()' >/dev/null 2>&1; then
-  "$H3_PYTHON" -c 'import torch; print(f"[H3 Cloud] reusing torch {torch.__version__} / CUDA {torch.version.cuda}")'
-else
-  uv pip install --python "$H3_PYTHON" \
-    torch==2.10.0 torchvision==0.25.0 torchaudio==2.10.0 \
-    --index-url https://download.pytorch.org/whl/cu130
-fi
+# Never replace the image's bundled CUDA/PyTorch packages during Pod startup.
+# If GPU initialization fails, abort cheaply and surface the real error.
+"$H3_PYTHON" -c 'import torch; assert torch.cuda.is_available(), "CUDA GPU is unavailable"; print(f"[H3 Cloud] GPU ready with torch {torch.__version__} / CUDA {torch.version.cuda}")'
 
 rm -rf "$COMFY/models/diffusion_models" "$COMFY/models/text_encoders" "$COMFY/models/vae" "$COMFY/models/loras"
 ln -s "$MODELS/diffusion_models" "$COMFY/models/diffusion_models"
