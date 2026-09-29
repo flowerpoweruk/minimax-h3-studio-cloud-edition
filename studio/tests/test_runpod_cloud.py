@@ -63,9 +63,20 @@ class RunpodCloudTests(unittest.TestCase):
         self.assertEqual((method, path), ("POST", "pods"))
         self.assertEqual(body["image"], DEFAULT_IMAGE)
         self.assertEqual(body["mounts"]["persistent"]["size"], 160)
-        self.assertEqual(body["ports"], ["8188/http", "22/tcp"])
+        self.assertEqual(body["ports"], ["8188/http"])
+        self.assertFalse(body["startSsh"])
+        self.assertEqual(body["gpu"]["allowedCudaVersions"], ["13.0"])
         self.assertIn("H3_CLOUD_TOKEN", body["env"])
-        self.assertIn("runpod/bootstrap.sh", body["args"])
+        self.assertNotIn("args", body)
+        self.assertTrue(body["image"].startswith("ghcr.io/flowerpoweruk/"))
+
+    def test_legacy_stock_image_is_migrated_to_prebuilt_runtime(self):
+        self.path.write_text(
+            json.dumps({"image": "runpod/pytorch:1.0.3-cu1300-torch291-ubuntu2404"}),
+            encoding="utf-8",
+        )
+        cloud = RunpodCloud(self.path)
+        self.assertEqual(cloud.public()["image"], DEFAULT_IMAGE)
 
     def test_running_stock_pod_reports_missing_comfy_port(self):
         cloud = RunpodCloud(self.path)

@@ -1098,7 +1098,7 @@
           <details class="h3-models-advanced" id="runpod-advanced">
             <summary id="runpod-advanced-summary">Managed Pod options</summary>
             <label><span id="runpod-gpu-label">Runpod GPU type ID</span>
-              <input type="text" id="runpod-gpu" value="NVIDIA RTX A6000" autocomplete="off" />
+              <input type="text" id="runpod-gpu" value="NVIDIA RTX PRO 6000 Blackwell Server Edition" autocomplete="off" />
             </label>
             <label><span id="runpod-cloud-label">Cloud tier</span>
               <select id="runpod-cloud"><option value="SECURE">Secure Cloud</option><option value="COMMUNITY">Community Cloud</option></select>
@@ -1106,11 +1106,11 @@
             <label><span id="runpod-volume-label">Persistent volume (GB)</span>
               <input type="number" id="runpod-volume" min="80" max="1000" value="150" />
             </label>
-            <label><span id="runpod-network-volume-label">Network volume ID (optional)</span>
-              <input type="text" id="runpod-network-volume" placeholder="Recommended for portable model storage" autocomplete="off" />
+            <label><span id="runpod-network-volume-label">Network volume ID (strongly recommended)</span>
+              <input type="text" id="runpod-network-volume" placeholder="Keeps models when switching Pods or GPUs" autocomplete="off" />
             </label>
             <label><span id="runpod-image-label">Container image</span>
-              <input type="text" id="runpod-image" value="runpod/pytorch:1.0.3-cu1300-torch291-ubuntu2404" autocomplete="off" />
+              <input type="text" id="runpod-image" value="ghcr.io/flowerpoweruk/minimax-h3-studio-cloud-edition:runpod-v1.0.0" autocomplete="off" />
             </label>
           </details>
           <div class="batch-add-row runpod-actions">

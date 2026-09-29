@@ -2,6 +2,10 @@
 
 Already configured a Runpod Pod? Follow **[Starting Up Runpod Again Easily](starting%20up%20runpod%20again%20easily.md)** for the short Start → Test → Generate routine and the safe shutdown steps that preserve downloaded models.
 
+For the researched deployment boundaries, reproducibility rules, storage
+tradeoffs and GPU-replacement procedure, see
+**[Runpod / ComfyUI Reliability Architecture](runpod/ARCHITECTURE.md)**.
+
 <p align="center">
   <img src="github-preview.png" alt="Minimax H3 Studio - Cloud Edition" width="640" />
 </p>
@@ -17,7 +21,8 @@ MiniMax H3 accepts text, images, video and audio as context and generates video 
 - **No local GPU required:** use the full Studio interface from an ordinary Windows PC or laptop.
 - **Managed Runpod Pods:** create, start, stop and test a Pod directly from Studio Settings.
 - **Private remote ComfyUI access:** managed Pods expose port 8188 through Runpod's proxy and require a generated bearer token.
-- **Persistent model storage:** keep the roughly 63 GB of H3 weights on a Pod volume or an optional Runpod network volume.
+- **Fast, repeatable startup:** ComfyUI, CUDA-facing Python packages and custom nodes are prebuilt in a pinned container image—no `pip`, `uv`, `apt` or Git install runs when a Pod starts.
+- **Persistent model storage:** keep the roughly 63 GB of H3 weights on a Runpod Network Volume so replacement and migrated Pods reuse the same files.
 - **Local mode preserved:** switch back to a locally installed NVIDIA/CUDA backend whenever you want.
 
 | Runs on your computer | Runs on Runpod |
@@ -34,7 +39,7 @@ Requirements: Windows 10 or 11, internet access, a [Runpod account](https://www.
 3. Double-click **`run-cloud-edition.bat`**. The browser opens H3 Studio automatically.
 4. Open **Settings → Compute backend** and complete the Runpod setup below.
 
-The installer deliberately does not install ComfyUI, CUDA, PyTorch or H3 model files on your computer. Those are installed on the managed Pod when it is first created.
+The installer deliberately does not install ComfyUI, CUDA, PyTorch or H3 model files on your computer. GPU software is already contained in the managed Pod image; only the H3 weights are stored on the Runpod volume.
 
 ## Set up Runpod
 
@@ -50,20 +55,24 @@ The API key is used by your local Studio only to manage your Pod. It is stored i
 
 The defaults are ready for H3:
 
-- **GPU:** `NVIDIA RTX A6000` (48 GB). You can replace this with another available Runpod GPU ID with sufficient VRAM.
+- **GPU:** `NVIDIA RTX PRO 6000 Blackwell Server Edition` (full GPU, not a MIG slice). You can replace this with another available Runpod GPU ID with sufficient VRAM.
 - **Cloud:** Secure Cloud. Community Cloud can also be selected.
 - **Persistent volume:** 150 GB, mounted at `/workspace`.
-- **Network volume ID:** optional. Enter an existing Runpod network-volume ID if you want the installation and models to be portable between compatible Pods.
+- **Network volume ID:** strongly recommended. Create a 150 GB or larger Network Volume in Runpod and enter its ID so models and outputs survive independently of the Pod. The volume and GPU must be available in a compatible data center.
 
-Click **Create managed Pod**. Cloud Edition provisions the Pod, clones this fork, installs the CUDA/ComfyUI stack, downloads both supported H3 model variants and starts an authenticated ComfyUI proxy on port 8188. The first setup downloads roughly 64 GB and can take a while.
+Click **Create managed Pod**. Cloud Edition provisions the Pod from the versioned, prebuilt Cloud Edition image and starts an authenticated ComfyUI proxy on port 8188. It does not install Python or CUDA packages at startup. On a new empty Network Volume only, the first start downloads roughly 64 GB of H3 weights. Every later start detects and reuses those files.
 
-When setup finishes, click **Test**. A green connection status means generation requests are using the Runpod GPU. Runpod documents Pod creation and the `https://<pod-id>-<port>.proxy.runpod.net` address format in its [Pod management reference](https://docs.runpod.io/runpodctl/reference/runpodctl-remove-pods).
+The managed image is application-only: it exposes `8188/http` and deliberately
+does not start SSH, Jupyter or a package installer. Its ComfyUI revision, custom
+node revisions and hashed Python dependency lock are fixed at image-build time.
+
+When setup finishes, click **Test**. A green connection status means generation requests are using the Runpod GPU. Runpod documents the `https://<pod-id>-<port>.proxy.runpod.net` format in its [port-exposure guide](https://docs.runpod.io/pods/configuration/expose-ports).
 
 ### 3. Generate and stop the Pod when finished
 
 Use H3 Studio normally—the generation controls do not change between local and cloud modes. Click **Stop Pod** in Settings when you are finished so active GPU compute stops. Your persistent or network volume remains available for later starts; storage charges may continue according to your Runpod plan.
 
-If a stopped Pod cannot reacquire its original GPU, choose another compatible GPU or use a network volume with a new Pod. See Runpod's [zero-GPU restart guidance](https://docs.runpod.io/pods/troubleshooting/zero-gpus).
+If a stopped Pod cannot reacquire its original GPU, migrate it or create a replacement attached to the same Network Volume. Runpod notes that migration creates a new Pod ID and new proxy URLs; save the replacement Pod ID in Studio. See Runpod's [Pod migration guide](https://docs.runpod.io/pods/troubleshooting/pod-migration).
 
 ### Use an existing Runpod Pod instead
 
@@ -74,6 +83,37 @@ Advanced users can connect an existing Pod:
 3. Enter the bearer token expected by that endpoint, then click **Save & connect** and **Test**.
 
 The managed-Pod option is recommended because it installs the exact nodes, workflows and model layout expected by this fork and configures authentication automatically.
+
+### Switching to another Runpod GPU without reinstalling
+
+With a Network Volume, stop the old Pod and create a managed Pod with a different
+GPU type while keeping the same **Network volume ID**. The new Pod pulls the
+prebuilt Cloud Edition image and mounts the existing weights; it does not clone,
+install or download those weights again. A normal Network Volume is tied to one
+data center, so only GPU types available in that data center can use it.
+
+For the widest cross-data-center GPU choice, Runpod now offers **Global Volumes**
+in beta. They are region-independent and optimized for read-heavy inference, but
+they have object-storage semantics (no atomic rename or file locking) and their
+Pod attachment is currently a Runpod-console flow rather than a stable field in
+the Pod API used by Studio. The safe advanced procedure is:
+
+1. Create a Global Volume in Runpod.
+2. Attach both the existing Network Volume and new Global Volume to one temporary
+   Pod and copy `/workspace/` to `/workspace-global/` with Runpod's documented
+   `rsync` procedure.
+3. Delete that temporary Pod only after the copy is verified.
+4. Deploy Cloud Edition image
+   `ghcr.io/flowerpoweruk/minimax-h3-studio-cloud-edition:runpod-v1.0.0`, attach
+   the Global Volume at `/workspace`, expose `8188/http`, and set the same strong
+   `H3_CLOUD_TOKEN` in both the Pod and Studio. Also set
+   `H3_ALLOW_MODEL_DOWNLOAD=0`; this makes a wrong or incomplete mount fail fast
+   instead of writing another 64 GB bundle to object-backed storage.
+
+See Runpod's [Global Volumes guide](https://docs.runpod.io/storage/globalvolume/overview)
+and [Global Volumes for Pods](https://docs.runpod.io/storage/globalvolume/globalvolume-pods).
+Because the feature is beta, the default one-click Studio path remains the more
+predictable Secure Cloud + Network Volume configuration.
 
 ## Other installation options
 
@@ -102,7 +142,7 @@ In Runpod mode, these files are installed on the Pod—not on your PC. In local 
 | H3-Base-Ref2VA | `minimax_h3_ref2va_pruned_int8_convrot.safetensors` | 21.0 GB |
 | **Total weights** | | **~63 GB** |
 
-Plus ComfyUI and its virtualenv (~10 GB).
+ComfyUI and its Python dependencies are part of the versioned container image, not the Network Volume.
 
 ### Why these files and not the official ones
 

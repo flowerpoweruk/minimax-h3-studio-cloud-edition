@@ -1,0 +1,15 @@
+.git
+.github
+.venv
+**/__pycache__
+**/*.pyc
+studio/data
+studio/outputs
+output
+models
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.mp4
+

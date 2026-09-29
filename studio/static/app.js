@@ -10618,11 +10618,11 @@ async function pullCinemaLibraryAsset(kind, libraryId) {
     $("runpod-settings")?.classList.toggle("hidden", provider !== "runpod");
     if ($("runpod-pod-id")) $("runpod-pod-id").value = d.pod_id || "";
     if ($("runpod-endpoint")) $("runpod-endpoint").value = d.endpoint_url || "";
-    if ($("runpod-gpu")) $("runpod-gpu").value = d.gpu_type || "NVIDIA RTX A6000";
+    if ($("runpod-gpu")) $("runpod-gpu").value = d.gpu_type || "NVIDIA RTX PRO 6000 Blackwell Server Edition";
     if ($("runpod-cloud")) $("runpod-cloud").value = d.cloud_type || "SECURE";
     if ($("runpod-volume")) $("runpod-volume").value = d.volume_gb || 150;
     if ($("runpod-network-volume")) $("runpod-network-volume").value = d.network_volume_id || "";
-    if ($("runpod-image")) $("runpod-image").value = d.image || "runpod/pytorch:1.0.3-cu1300-torch291-ubuntu2404";
+    if ($("runpod-image")) $("runpod-image").value = d.image || "ghcr.io/flowerpoweruk/minimax-h3-studio-cloud-edition:runpod-v1.0.0";
     if ($("runpod-api-key")) {
       $("runpod-api-key").value = "";
       $("runpod-api-key").placeholder = d.api_key_set

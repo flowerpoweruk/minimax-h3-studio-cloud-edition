@@ -10,9 +10,11 @@ import httpx
 
 
 RUNPOD_API = "https://api.runpod.io/v2"
-DEFAULT_IMAGE = "runpod/pytorch:1.0.3-cu1300-torch291-ubuntu2404"
-DEFAULT_GPU = "NVIDIA RTX A6000"
-DEFAULT_REPOSITORY = "https://github.com/flowerpoweruk/minimax-h3-studio-cloud-edition.git"
+DEFAULT_IMAGE = "ghcr.io/flowerpoweruk/minimax-h3-studio-cloud-edition:runpod-v1.0.0"
+DEFAULT_GPU = "NVIDIA RTX PRO 6000 Blackwell Server Edition"
+LEGACY_RUNTIME_IMAGES = {
+    "runpod/pytorch:1.0.3-cu1300-torch291-ubuntu2404",
+}
 
 
 def _mask(value: str, *, keep: int = 4) -> str:
@@ -64,6 +66,11 @@ class RunpodCloud:
                 data.update(raw)
         except (FileNotFoundError, json.JSONDecodeError, OSError):
             pass
+        # Existing Cloud Edition installs used a stock PyTorch image plus a
+        # long startup bootstrap. Transparently move those settings to the
+        # pinned, prebuilt runtime; custom user-supplied images stay untouched.
+        if str(data.get("image") or "").strip() in LEGACY_RUNTIME_IMAGES:
+            data["image"] = DEFAULT_IMAGE
         data["provider"] = "runpod" if data.get("provider") == "runpod" else "local"
         return data
 
@@ -288,28 +295,24 @@ class RunpodCloud:
     async def create_pod(self) -> dict[str, Any]:
         token = self.ensure_access_token()
         settings = self._settings
-        command = (
-            "bash -lc \"set -e; "
-            "apt-get update -qq; apt-get install -y -qq git; "
-            "if [ ! -d /workspace/minimax-h3-cloud/.git ]; then "
-            f"git clone {DEFAULT_REPOSITORY} /workspace/minimax-h3-cloud; "
-            "fi; cd /workspace/minimax-h3-cloud; git pull --ff-only; "
-            "exec bash runpod/bootstrap.sh\""
-        )
         body: dict[str, Any] = {
             "name": "minimax-h3-studio-cloud-edition",
             "image": settings.get("image") or DEFAULT_IMAGE,
-            "args": command,
             "cloud": settings.get("cloud_type") or "SECURE",
-            "disk": 80,
-            "ports": ["8188/http", "22/tcp"],
-            "startSsh": True,
+            "disk": 40,
+            "ports": ["8188/http"],
+            "startSsh": False,
             # Managed Pods install both T2V and reference-video weights once so
             # every Studio mode works after a restart without another setup.
-            "env": {"H3_CLOUD_TOKEN": token, "H3_DOWNLOAD_REF2V": "1"},
+            "env": {
+                "H3_CLOUD_TOKEN": token,
+                "H3_DOWNLOAD_REF2V": "1",
+                "H3_ALLOW_MODEL_DOWNLOAD": "1",
+            },
             "gpu": {
                 "id": settings.get("gpu_type") or DEFAULT_GPU,
                 "count": 1,
+                "allowedCudaVersions": ["13.0"],
             },
         }
         network_volume_id = str(settings.get("network_volume_id") or "").strip()
