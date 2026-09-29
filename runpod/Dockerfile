@@ -43,7 +43,7 @@ COPY runpod/requirements.lock /opt/h3-cloud/requirements.lock
 # so this build cannot accidentally download or replace the GPU stack.
 RUN python -m venv --system-site-packages /opt/h3-cloud/venv \
     && /opt/h3-cloud/venv/bin/python -m pip install --no-deps \
-      'https://files.pythonhosted.org/packages/93/b1/db2941526ecddd84884132e2742a55c9311296a6a38627f9e2627f5ac889/torchvision-0.24.1-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=66a98471fc18cad9064123106d810a75f57f0838eee20edc56233fd8484b0cc7' \
+      'https://download-r2.pytorch.org/whl/cu130/torchvision-0.24.1%2Bcu130-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=6939dd403cc28ab0a46f53e6c86e2e852cf65771c1b0ddd09c44c541a1cdbad9' \
     && /opt/h3-cloud/venv/bin/python -m pip install --require-hashes -r /opt/h3-cloud/requirements.lock \
     && /opt/h3-cloud/venv/bin/python -c "import torch, torchvision; assert torch.__version__.startswith('2.9.1'); assert torchvision.__version__.startswith('0.24.1'); print(torch.__version__, torch.version.cuda)" \
     && /opt/h3-cloud/venv/bin/python -m pip check
