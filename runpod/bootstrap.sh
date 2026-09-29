@@ -10,11 +10,11 @@ MODELS="$RUNTIME/models"
 export DEBIAN_FRONTEND=noninteractive
 # Retry stalled package mirrors promptly; large model transfers use aria2 below.
 export UV_HTTP_TIMEOUT=60
-# Runpod persistent volumes are network filesystems. Package caches contain
-# thousands of tiny files and become extremely slow there, so keep uv's
-# disposable cache on the Pod's local disk. Models and the runtime still live
-# under /workspace and survive a stop/start cycle.
-export UV_CACHE_DIR="${H3_UV_CACHE_DIR:-/tmp/minimax-h3-uv-cache}"
+# Keep downloaded wheels on the network volume. Installation metadata can be
+# slower there than on local disk, but it is vastly cheaper than downloading
+# CUDA/Python packages again after a Pod is replaced or migrated.
+export UV_CACHE_DIR="${H3_UV_CACHE_DIR:-/workspace/h3-runtime/uv-cache}"
+export UV_LINK_MODE=copy
 
 mkdir -p "$RUNTIME" "$MODELS/diffusion_models" "$MODELS/text_encoders" "$MODELS/vae" "$MODELS/loras"
 apt-get update -qq
@@ -29,13 +29,22 @@ else
   git -C "$COMFY" pull --ff-only
 fi
 
-uv venv "$ENV_DIR" --python "$(command -v python)" --system-site-packages --allow-existing
-# Keep installed packages on /workspace with the model volume. Installing into
-# the container's system Python made every replacement/migrated Pod download the
-# full ComfyUI/CUDA dependency stack again. The persistent venv reuses packages
-# on later Pods while still seeing any CUDA-enabled torch supplied by the image.
-uv pip install --python "$ENV_DIR/bin/python" -r "$COMFY/requirements.txt"
-uv pip install --python "$ENV_DIR/bin/python" -r "$ROOT/studio/requirements.txt"
+if [[ -x /venv/main/bin/python ]] && /venv/main/bin/python -c 'import torch; assert torch.cuda.is_available()' >/dev/null 2>&1; then
+  # Official Runpod PyTorch images keep their CUDA environment here. The old
+  # --system install bypassed it and downloaded torch plus the entire CUDA stack
+  # again. Install only genuinely missing packages into the supplied venv.
+  H3_PYTHON="/venv/main/bin/python"
+  echo "[H3 Cloud] using Runpod's prebuilt CUDA/PyTorch environment"
+  uv pip install --python "$H3_PYTHON" -r "$COMFY/requirements.txt"
+  uv pip install --python "$H3_PYTHON" -r "$ROOT/studio/requirements.txt"
+else
+  uv venv "$ENV_DIR" --python "$(command -v python)" --system-site-packages --allow-existing
+  # Fallback for third-party/base images: install once into the network volume,
+  # so a later replacement Pod reuses the same environment.
+  uv pip install --python "$ENV_DIR/bin/python" -r "$COMFY/requirements.txt"
+  uv pip install --python "$ENV_DIR/bin/python" -r "$ROOT/studio/requirements.txt"
+  H3_PYTHON="$ENV_DIR/bin/python"
+fi
 
 for spec in \
   "https://github.com/ltdrdata/ComfyUI-Manager|ComfyUI-Manager" \
@@ -50,15 +59,15 @@ for spec in \
     git -C "$dest" pull --ff-only
   fi
 done
-uv pip install --python "$ENV_DIR/bin/python" -r "$COMFY/custom_nodes/ComfyUI-KJNodes/requirements.txt"
+uv pip install --python "$H3_PYTHON" -r "$COMFY/custom_nodes/ComfyUI-KJNodes/requirements.txt"
 
 # Official Runpod PyTorch images already include a CUDA build tuned for their
 # driver/GPU. Reusing it avoids a multi-gigabyte reinstall on every Pod. Fall
 # back to Cloud Edition's CUDA 13 build only for bare images without CUDA torch.
-if "$ENV_DIR/bin/python" -c 'import torch; assert torch.cuda.is_available()' >/dev/null 2>&1; then
-  "$ENV_DIR/bin/python" -c 'import torch; print(f"[H3 Cloud] reusing torch {torch.__version__} / CUDA {torch.version.cuda}")'
+if "$H3_PYTHON" -c 'import torch; assert torch.cuda.is_available()' >/dev/null 2>&1; then
+  "$H3_PYTHON" -c 'import torch; print(f"[H3 Cloud] reusing torch {torch.__version__} / CUDA {torch.version.cuda}")'
 else
-  uv pip install --python "$ENV_DIR/bin/python" \
+  uv pip install --python "$H3_PYTHON" \
     torch==2.10.0 torchvision==0.25.0 torchaudio==2.10.0 \
     --index-url https://download.pytorch.org/whl/cu130
 fi
@@ -112,14 +121,14 @@ if [[ -z "${H3_CLOUD_TOKEN:-}" ]]; then
 fi
 
 cd "$COMFY"
-"$ENV_DIR/bin/python" main.py --listen 127.0.0.1 --port 8189 --disable-auto-launch &
+"$H3_PYTHON" main.py --listen 127.0.0.1 --port 8189 --disable-auto-launch &
 COMFY_PID=$!
 trap 'kill "$COMFY_PID" 2>/dev/null || true' EXIT INT TERM
 
 for _ in $(seq 1 180); do
   if curl -fsS http://127.0.0.1:8189/system_stats >/dev/null; then
     echo "[H3 Cloud] ComfyUI ready; authenticated proxy starting on :8188"
-    exec "$ENV_DIR/bin/python" "$ROOT/runpod/auth_proxy.py"
+    exec "$H3_PYTHON" "$ROOT/runpod/auth_proxy.py"
   fi
   sleep 2
 done
