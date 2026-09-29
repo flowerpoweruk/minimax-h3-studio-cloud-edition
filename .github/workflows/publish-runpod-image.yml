@@ -1,0 +1,88 @@
+name: Publish Runpod image
+
+on:
+  push:
+    tags: ["runpod-v*"]
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-runpod-image
+  cancel-in-progress: true
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.11.29"
+      - name: Verify dependency lock is reproducible
+        shell: bash
+        run: |
+          uv pip compile runpod/requirements.in \
+            --python-version 3.12 \
+            --python-platform x86_64-manylinux_2_28 \
+            --excludes runpod/requirements.exclude \
+            --no-strip-markers \
+            --generate-hashes \
+            --output-file runpod/requirements.lock
+          git diff --exit-code -- runpod/requirements.lock
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/minimax-h3-studio-cloud-edition
+          tags: |
+            type=ref,event=tag
+            type=sha,prefix=runpod-
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: runpod/Dockerfile
+          load: true
+          tags: h3-cloud:smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Verify pinned runtime and ComfyUI startup
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm --entrypoint python h3-cloud:smoke -c \
+            'import torch, torchvision, aiohttp, folder_paths; assert torch.__version__.startswith("2.9.1"); assert torchvision.__version__.startswith("0.24.1")'
+          docker run --rm --entrypoint bash h3-cloud:smoke -n /opt/h3-cloud/entrypoint.sh
+          cid=$(docker run -d --rm -p 127.0.0.1:18189:8189 --entrypoint python h3-cloud:smoke \
+            main.py --cpu --listen 0.0.0.0 --port 8189 --disable-auto-launch)
+          trap 'docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:18189/system_stats >/dev/null; then
+              docker logs "$cid"
+              exit 0
+            fi
+            if ! docker inspect "$cid" >/dev/null 2>&1; then
+              echo "ComfyUI smoke container exited"
+              exit 1
+            fi
+            sleep 2
+          done
+          docker logs "$cid"
+          echo "ComfyUI smoke test timed out"
+          exit 1
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: runpod/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
