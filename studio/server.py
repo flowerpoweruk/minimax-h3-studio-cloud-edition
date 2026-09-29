@@ -2054,7 +2054,7 @@ async def reset_production(body: ResetBody = ResetBody()):
             except Exception:
                 pass
         removed = _wipe_production_files()
-    await _free_comfy_if_idle(reason="reset production")
+    await _free_comfy_if_idle(reason="reset production", force=True)
     if body.wipe_logs:
         await clear_logs()
         removed["logs_wiped"] = True
@@ -2362,9 +2362,18 @@ async def _free_llm_for_production() -> list[str]:
         return []
 
 
-async def _free_comfy_if_idle(*, reason: str) -> None:
-    """Unload Comfy/H3 models after the last queued clip — not between continue shots."""
+async def _free_comfy_if_idle(*, reason: str, force: bool = False) -> None:
+    """Unload Comfy/H3 models when appropriate.
+
+    A cloud Pod is billed while it is running, so unloading tens of gigabytes of
+    H3 weights after every clip only makes the next generation slower without
+    saving the user any money. Keep Runpod models warm between jobs and reserve
+    an explicit unload for Reset. Local mode retains the original behaviour so
+    VRAM is returned to desktop applications when the queue becomes idle.
+    """
     global _last_comfy_free_at
+    if runpod_cloud.provider == "runpod" and not force:
+        return
     async with _lock:
         busy = any(j.get("status") in ("queued", "running") for j in _jobs)
     if busy:
