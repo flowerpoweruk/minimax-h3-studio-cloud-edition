@@ -302,6 +302,17 @@ class RunpodCloud:
                 "Runpod Network Volumes require Secure Cloud. Select Secure Cloud "
                 "or clear the Network Volume ID before creating a Pod."
             )
+        network_volume: dict[str, Any] = {}
+        if network_volume_id:
+            network_volume = await self._request(
+                "GET", f"network-volumes/{network_volume_id}"
+            )
+            data_center = str(network_volume.get("dataCenter") or "").strip()
+            if not data_center:
+                raise RuntimeError(
+                    "Runpod did not return a datacenter for the configured Network "
+                    "Volume; refusing to create a Pod with uncertain storage placement."
+                )
         body: dict[str, Any] = {
             "name": "minimax-h3-studio-cloud-edition",
             "image": settings.get("image") or DEFAULT_IMAGE,
@@ -326,6 +337,7 @@ class RunpodCloud:
             body["mounts"] = {
                 "network": [{"volumeId": network_volume_id, "path": "/workspace"}]
             }
+            body["dataCenterIds"] = [str(network_volume["dataCenter"])]
         else:
             body["mounts"] = {
                 "persistent": {

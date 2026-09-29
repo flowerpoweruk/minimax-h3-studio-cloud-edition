@@ -16,6 +16,12 @@ class RecordingRunpodCloud(RunpodCloud):
 
     async def _request(self, method: str, path: str, *, json_body=None):
         self.calls.append((method, path, json_body))
+        if method == "GET" and path.startswith("network-volumes/"):
+            return {
+                "id": path.rsplit("/", 1)[-1],
+                "dataCenter": "US-TEST-1",
+                "type": "STANDARD",
+            }
         if method == "POST" and path == "pods":
             return {"id": "pod-cloud-123", "desiredStatus": "RUNNING"}
         return {"id": "pod-cloud-123"}
@@ -83,6 +89,28 @@ class RunpodCloudTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "require Secure Cloud"):
             asyncio.run(cloud.create_pod())
         self.assertEqual(cloud.calls, [])
+
+    def test_network_volume_is_preflighted_and_pins_its_datacenter(self):
+        cloud = RecordingRunpodCloud(self.path)
+        cloud.save(
+            {
+                "provider": "runpod",
+                "api_key": "rpa_test",
+                "cloud_type": "SECURE",
+                "network_volume_id": "network-volume-123",
+            }
+        )
+        asyncio.run(cloud.create_pod())
+        self.assertEqual(
+            cloud.calls[0],
+            ("GET", "network-volumes/network-volume-123", None),
+        )
+        body = cloud.calls[-1][2]
+        self.assertEqual(body["dataCenterIds"], ["US-TEST-1"])
+        self.assertEqual(
+            body["mounts"]["network"],
+            [{"volumeId": "network-volume-123", "path": "/workspace"}],
+        )
 
     def test_legacy_stock_image_is_migrated_to_prebuilt_runtime(self):
         self.path.write_text(
