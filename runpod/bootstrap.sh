@@ -55,6 +55,34 @@ echo "[H3 Cloud] using bundled PyTorch from $BASE_PYTHON"
 # never replace them with another multi-gigabyte CUDA stack.
 uv venv "$ENV_DIR" --python "$BASE_PYTHON" --system-site-packages --allow-existing
 H3_PYTHON="$ENV_DIR/bin/python"
+
+# PyPI's single-stream downloads can be extremely slow from some Runpod data
+# centers. Fetch the few large, dependency-free wheels with aria2's parallel
+# connections, retain them on the network volume, then let uv resolve the small
+# packages normally. These are pinned to ComfyUI's current requirements.
+WHEEL_CACHE="$RUNTIME/wheels"
+mkdir -p "$WHEEL_CACHE"
+install_cached_wheel() {
+  local filename="$1" url="$2"
+  local wheel="$WHEEL_CACHE/$filename"
+  if [[ ! -s "$wheel" ]]; then
+    echo "[H3 Cloud] parallel download: $filename"
+    aria2c --allow-overwrite=true --auto-file-renaming=false --continue=true \
+      --max-connection-per-server=16 --split=16 --min-split-size=1M \
+      --file-allocation=none --dir="$WHEEL_CACHE" --out="$filename" "$url"
+  fi
+  uv pip install --python "$H3_PYTHON" --no-deps "$wheel"
+}
+install_cached_wheel \
+  "av-18.1.0-cp311-abi3-manylinux_2_28_x86_64.whl" \
+  "https://files.pythonhosted.org/packages/27/3a/204dbfc3e08eb4cdc6e6ff57be02150bc44523ebdb50182d10025792ebd9/av-18.1.0-cp311-abi3-manylinux_2_28_x86_64.whl"
+install_cached_wheel \
+  "comfyui_workflow_templates_media_api-0.3.84-py3-none-any.whl" \
+  "https://files.pythonhosted.org/packages/35/47/e4c723615b396f75893049af38a4b53bcb0e8944418819bb0e0d72f342e8/comfyui_workflow_templates_media_api-0.3.84-py3-none-any.whl"
+install_cached_wheel \
+  "opencv_python_headless-5.0.0.93-cp37-abi3-manylinux_2_28_x86_64.whl" \
+  "https://files.pythonhosted.org/packages/9b/21/f6ef335f6e65724aa78b8d792b48d40a48c381715f1e62f5a5049e09d07e/opencv_python_headless-5.0.0.93-cp37-abi3-manylinux_2_28_x86_64.whl"
+
 FILTERED_COMFY_REQUIREMENTS="$(mktemp)"
 trap 'rm -f "$FILTERED_COMFY_REQUIREMENTS"' EXIT
 awk '!/^[[:space:]]*(torch|torchvision|torchaudio)([[:space:]<>=!~].*)?$/' \
