@@ -10,10 +10,11 @@ import httpx
 
 
 RUNPOD_API = "https://api.runpod.io/v2"
-DEFAULT_IMAGE = "ghcr.io/flowerpoweruk/minimax-h3-studio-cloud-edition:runpod-v1.0.0"
+DEFAULT_IMAGE = "ghcr.io/flowerpoweruk/minimax-h3-studio-cloud-edition:runpod-v1.0.1"
 DEFAULT_GPU = "NVIDIA RTX PRO 6000 Blackwell Server Edition"
 LEGACY_RUNTIME_IMAGES = {
     "runpod/pytorch:1.0.3-cu1300-torch291-ubuntu2404",
+    "ghcr.io/flowerpoweruk/minimax-h3-studio-cloud-edition:runpod-v1.0.0",
 }
 
 

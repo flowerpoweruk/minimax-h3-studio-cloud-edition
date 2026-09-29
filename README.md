@@ -104,7 +104,7 @@ the Pod API used by Studio. The safe advanced procedure is:
    `rsync` procedure.
 3. Delete that temporary Pod only after the copy is verified.
 4. Deploy Cloud Edition image
-   `ghcr.io/flowerpoweruk/minimax-h3-studio-cloud-edition:runpod-v1.0.0`, attach
+   `ghcr.io/flowerpoweruk/minimax-h3-studio-cloud-edition:runpod-v1.0.1`, attach
    the Global Volume at `/workspace`, expose `8188/http`, and set the same strong
    `H3_CLOUD_TOKEN` in both the Pod and Studio. Also set
    `H3_ALLOW_MODEL_DOWNLOAD=0`; this makes a wrong or incomplete mount fail fast

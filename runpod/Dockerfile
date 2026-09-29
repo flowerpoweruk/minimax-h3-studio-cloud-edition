@@ -40,9 +40,9 @@ COPY runpod/requirements.lock /opt/h3-cloud/requirements.lock
 # The base image owns the CUDA 13 / PyTorch 2.9.1 stack. The hashed lock was
 # resolved with all Torch, CUDA and NVIDIA runtime packages explicitly excluded,
 # so this build cannot accidentally download or replace the GPU stack.
-RUN python -m pip install --require-hashes -r /opt/h3-cloud/requirements.lock \
-    && python -m pip install --no-deps \
+RUN python -m pip install --no-deps \
       'https://files.pythonhosted.org/packages/93/b1/db2941526ecddd84884132e2742a55c9311296a6a38627f9e2627f5ac889/torchvision-0.24.1-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=66a98471fc18cad9064123106d810a75f57f0838eee20edc56233fd8484b0cc7' \
+    && python -m pip install --require-hashes -r /opt/h3-cloud/requirements.lock \
     && python -c "import torch, torchvision; assert torch.__version__.startswith('2.9.1'); assert torchvision.__version__.startswith('0.24.1'); print(torch.__version__, torch.version.cuda)" \
     && python -m pip check
 
