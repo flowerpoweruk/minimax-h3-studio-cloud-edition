@@ -88,6 +88,7 @@ trap cleanup EXIT INT TERM
 cd "$COMFY"
 python main.py \
   --listen 127.0.0.1 --port 8189 --disable-auto-launch \
+  --disable-comfy-compiler --highvram \
   --models-directory "$MODELS" \
   --output-directory "$OUTPUTS" --input-directory "$INPUTS" &
 COMFY_PID=$!

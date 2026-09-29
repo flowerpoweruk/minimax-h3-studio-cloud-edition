@@ -10622,7 +10622,7 @@ async function pullCinemaLibraryAsset(kind, libraryId) {
     if ($("runpod-cloud")) $("runpod-cloud").value = d.cloud_type || "SECURE";
     if ($("runpod-volume")) $("runpod-volume").value = d.volume_gb || 150;
     if ($("runpod-network-volume")) $("runpod-network-volume").value = d.network_volume_id || "";
-    if ($("runpod-image")) $("runpod-image").value = d.image || "ghcr.io/flowerpoweruk/minimax-h3-studio-cloud-edition:runpod-v1.0.5";
+    if ($("runpod-image")) $("runpod-image").value = d.image || "ghcr.io/flowerpoweruk/minimax-h3-studio-cloud-edition:runpod-v1.0.6";
     if ($("runpod-api-key")) {
       $("runpod-api-key").value = "";
       $("runpod-api-key").placeholder = d.api_key_set
